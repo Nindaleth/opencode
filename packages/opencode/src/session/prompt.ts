@@ -383,7 +383,7 @@ const layer = Layer.effect(
 
       yield* plugin.trigger(
         "tool.execute.after",
-        { tool: TaskTool.id, sessionID, callID: part.id, args: taskArgs },
+        { tool: TaskTool.id, sessionID, callID: part.callID, args: taskArgs },
         result,
       )
 

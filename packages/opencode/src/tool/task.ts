@@ -17,6 +17,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@/provider/provider"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -88,6 +89,7 @@ export const TaskTool = Tool.define(
     const background = yield* BackgroundJob.Service
     const config = yield* Config.Service
     const plugin = yield* Plugin.Service
+    const provider = yield* Provider.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
@@ -109,6 +111,7 @@ export const TaskTool = Tool.define(
         model?: {
           providerID: string
           modelID: string
+          variant?: string
         }
       } = yield* plugin.trigger(
         "tool.execute.before",
@@ -203,15 +206,25 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const model = hook.model
+      const pluginModel = hook.model
+        ? yield* provider.getModel(ProviderV2.ID.make(hook.model.providerID), ModelV2.ID.make(hook.model.modelID))
+        : undefined
+      const model = pluginModel
         ? {
-            providerID: ProviderV2.ID.make(hook.model.providerID),
-            modelID: ModelV2.ID.make(hook.model.modelID),
+            providerID: pluginModel.providerID,
+            modelID: pluginModel.id,
           }
         : (next.model ?? {
             modelID: msg.info.modelID,
             providerID: msg.info.providerID,
           })
+      const childVariant = pluginModel
+        ? hook.model?.variant && pluginModel.variants?.[hook.model.variant]
+          ? hook.model.variant
+          : undefined
+        : next.model
+          ? undefined
+          : variant
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -236,7 +249,7 @@ export const TaskTool = Tool.define(
             modelID: model.modelID,
             providerID: model.providerID,
           },
-          variant: next.model ? undefined : variant,
+          variant: childVariant,
           agent: next.name,
           parts,
         })
