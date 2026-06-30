@@ -281,6 +281,7 @@ export interface Hooks {
       model?: {
         providerID: string
         modelID: string
+        variant?: string
       }
     },
   ) => Promise<void>
