@@ -264,8 +264,25 @@ export interface Hooks {
     output: { parts: Part[] },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; callID: string },
-    output: { args: any },
+    input: {
+      tool: string
+      sessionID: string
+      callID: string
+      task?: {
+        subagentType: string
+        parentModel: {
+          providerID: string
+          modelID: string
+        }
+      }
+    },
+    output: {
+      args: any
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
   ) => Promise<void>
   "shell.env"?: (
     input: { cwd: string; sessionID?: string; callID?: string },

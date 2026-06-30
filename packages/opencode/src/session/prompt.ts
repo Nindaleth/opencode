@@ -304,11 +304,6 @@ const layer = Layer.effect(
         subagent_type: task.agent,
         command: task.command,
       }
-      yield* plugin.trigger(
-        "tool.execute.before",
-        { tool: TaskTool.id, sessionID, callID: part.id },
-        { args: taskArgs },
-      )
 
       const taskAgent = yield* agents.get(task.agent)
       if (!taskAgent) {
