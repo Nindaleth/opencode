@@ -1758,6 +1758,78 @@ unixNoLLMServer(
 )
 
 unixNoLLMServer(
+  "shell persists variant on the synthetic shell user message",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, chat } = yield* boot()
+
+      yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "echo hi",
+        variant: "high",
+      })
+
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const shellUser = msgs.findLast(
+        (item) =>
+          item.info.role === "user" &&
+          item.parts.some(
+            (part) =>
+              part.type === "text" &&
+              part.synthetic === true &&
+              part.text === "The following tool was executed by the user",
+          ),
+      )
+
+      expect(shellUser?.info.role).toBe("user")
+      if (!shellUser || shellUser.info.role !== "user") return
+
+      expect(shellUser.info.model).toMatchObject({
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+        variant: "high",
+      })
+    }),
+  { config: cfg },
+)
+
+it.instance("loop after shell uses the preserved shell variant", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.shell({
+      sessionID: chat.id,
+      agent: "build",
+      command: "echo hi",
+      variant: "high",
+    })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "after shell" }],
+    })
+    yield* llm.text("done")
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+
+    const inputs = yield* llm.inputs
+    const last = inputs.at(-1)
+    expect(last?.providerOptions).toBeDefined()
+    expect(JSON.stringify(last)).toContain("high")
+  }),
+)
+
+unixNoLLMServer(
   "shell uses configured shell over env shell",
   () =>
     withSh(() =>

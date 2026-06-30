@@ -468,7 +468,11 @@ const layer = Layer.effect(
               time: { created: Date.now() },
               role: "user",
               agent: input.agent,
-              model: { providerID: model.providerID, modelID: model.modelID },
+              model: {
+                providerID: model.providerID,
+                modelID: model.modelID,
+                ...(input.variant ? { variant: input.variant } : {}),
+              },
             }
             yield* sessions.updateMessage(userMsg)
             const userPart: SessionV1.Part = {
@@ -1525,6 +1529,7 @@ export const ShellInput = Schema.Struct({
   agent: Schema.String,
   model: Schema.optional(ModelRef),
   command: Schema.String,
+  variant: Schema.optional(Schema.String),
 })
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 

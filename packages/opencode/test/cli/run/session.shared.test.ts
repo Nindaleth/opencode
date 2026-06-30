@@ -244,4 +244,30 @@ describe("run session shared", () => {
 
     expect(sessionVariant(session, model)).toBe("minimal")
   })
+
+  test("keeps the latest matching variant when the latest turn is a shell-style user message", () => {
+    const session = createSession([
+      userMessage("msg-user-1", [textPart("txt-user-1", "msg-user-1", "first")], "high"),
+      assistantMessage("msg-assistant-1", [textPart("txt-assistant-1", "msg-assistant-1", "ok")]),
+      {
+        info: {
+          id: "msg-user-2",
+          sessionID: "session-1",
+          role: "user",
+          time: { created: 2 },
+          agent: "build",
+          model: {
+            providerID: "openai",
+            modelID: "gpt-5",
+            variant: "high",
+          },
+        },
+        parts: [
+          textPart("txt-user-2", "msg-user-2", "The following tool was executed by the user", { synthetic: true }),
+        ],
+      },
+    ])
+
+    expect(sessionVariant(session, model)).toBe("high")
+  })
 })
