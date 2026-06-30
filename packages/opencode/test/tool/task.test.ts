@@ -16,6 +16,7 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { Provider } from "@/provider/provider"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
@@ -27,12 +28,59 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 afterEach(async () => {
+  pluginBeforeInputs.length = 0
+  pluginOverrideModel = undefined
   await disposeAllInstances()
 })
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
   modelID: ModelV2.ID.make("test-model"),
+}
+
+const baseProviderModel = {
+  attachment: false,
+  reasoning: false,
+  temperature: false,
+  tool_call: true,
+  release_date: "2025-01-01",
+  limit: { context: 100000, output: 10000 },
+  cost: { input: 0, output: 0 },
+  options: {},
+}
+
+const providerConfig = {
+  provider: {
+    test: {
+      name: "Test",
+      id: "test",
+      env: [],
+      npm: "@ai-sdk/openai-compatible",
+      models: {
+        "test-model": {
+          id: "test-model",
+          name: "Test Model",
+          ...baseProviderModel,
+          variants: { xhigh: {}, high: {} },
+        },
+        "plugin-model": {
+          id: "plugin-model",
+          name: "Plugin Model",
+          ...baseProviderModel,
+          variants: { high: {} },
+        },
+        "subagent-model": {
+          id: "subagent-model",
+          name: "Subagent Model",
+          ...baseProviderModel,
+        },
+      },
+      options: {
+        apiKey: "test-key",
+        baseURL: "http://localhost:1/v1",
+      },
+    },
+  },
 }
 
 const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
@@ -47,6 +95,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       SessionProjector.node,
       SessionRunState.node,
       SessionStatus.node,
+      Provider.node,
       Truncate.node,
       ToolRegistry.node,
       Plugin.node,
@@ -60,6 +109,13 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 const it = testEffect(layer())
 const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
 const pluginBeforeInputs: unknown[] = []
+let pluginOverrideModel:
+  | {
+      providerID: string
+      modelID: string
+      variant?: string
+    }
+  | undefined
 
 const pluginOverrideLayer = Layer.mock(Plugin.Service)({
   init: () => Effect.void,
@@ -68,12 +124,9 @@ const pluginOverrideLayer = Layer.mock(Plugin.Service)({
     Effect.sync(() => {
       if (name !== "tool.execute.before") return output
       pluginBeforeInputs.push(input)
-      if (typeof output !== "object" || output === null) return output
+      if (!pluginOverrideModel || typeof output !== "object" || output === null) return output
       Object.assign(output, {
-        model: {
-          providerID: "test",
-          modelID: "plugin-model",
-        },
+        model: pluginOverrideModel,
       })
       return output
     }),
@@ -91,6 +144,7 @@ const withPluginOverride = testEffect(
       SessionProjector.node,
       SessionRunState.node,
       SessionStatus.node,
+      Provider.node,
       Truncate.node,
       ToolRegistry.node,
       Database.node,
@@ -355,7 +409,10 @@ describe("tool.task", () => {
     "execute uses plugin model override before configured subagent model",
     () =>
       Effect.gen(function* () {
-        pluginBeforeInputs.length = 0
+        pluginOverrideModel = {
+          providerID: "test",
+          modelID: "plugin-model",
+        }
         const { chat, assistant } = yield* seed()
         const tool = yield* TaskTool
         const def = yield* tool.init()
@@ -387,6 +444,7 @@ describe("tool.task", () => {
         }
         expect(result.metadata.model).toEqual(expected)
         expect(seen?.model).toEqual(expected)
+        expect(seen?.variant).toBeUndefined()
         expect(pluginBeforeInputs).toEqual([
           {
             tool: "task",
@@ -401,6 +459,176 @@ describe("tool.task", () => {
       }),
     {
       config: {
+        ...providerConfig,
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
+  )
+
+  withPluginOverride.instance(
+    "execute preserves a valid plugin variant on the plugin-selected model",
+    () =>
+      Effect.gen(function* () {
+        pluginOverrideModel = {
+          providerID: "test",
+          modelID: "plugin-model",
+          variant: "high",
+        }
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            callID: "call_task_variant_valid",
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(result.metadata.model).toEqual({
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        })
+        expect(seen?.model).toEqual({
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        })
+        expect(seen?.variant).toBe("high")
+      }),
+    {
+      config: {
+        ...providerConfig,
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
+  )
+
+  withPluginOverride.instance(
+    "execute clears an invalid plugin variant and still runs",
+    () =>
+      Effect.gen(function* () {
+        pluginOverrideModel = {
+          providerID: "test",
+          modelID: "plugin-model",
+          variant: "missing",
+        }
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            callID: "call_task_variant_invalid",
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(result.metadata.model).toEqual({
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        })
+        expect(seen?.model).toEqual({
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        })
+        expect(seen?.variant).toBeUndefined()
+        expect(result.output).toContain('state="completed"')
+      }),
+    {
+      config: {
+        ...providerConfig,
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
+  )
+
+  withPluginOverride.instance(
+    "execute fails when the plugin-selected model does not exist",
+    () =>
+      Effect.gen(function* () {
+        pluginOverrideModel = {
+          providerID: "test",
+          modelID: "missing-model",
+          variant: "high",
+        }
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let prompted = false
+
+        const exit = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              callID: "call_task_missing_model",
+              extra: {
+                promptOps: stubOps({
+                  onPrompt: () => {
+                    prompted = true
+                  },
+                }),
+              },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(prompted).toBe(false)
+      }),
+    {
+      config: {
+        ...providerConfig,
         agent: {
           general: {
             model: "test/subagent-model",

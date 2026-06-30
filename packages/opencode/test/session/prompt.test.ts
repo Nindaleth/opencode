@@ -259,6 +259,20 @@ const recordingPluginLayer = Layer.mock(Plugin.Service)({
     }),
 })
 
+const beforeAndAfterHookInputs: Array<{ name: string; input: unknown }> = []
+
+const recordingBeforeAndAfterPluginLayer = Layer.mock(Plugin.Service)({
+  init: () => Effect.void,
+  list: () => Effect.succeed([]),
+  trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) =>
+    Effect.sync(() => {
+      if (name === "tool.execute.before" || name === "tool.execute.after") {
+        beforeAndAfterHookInputs.push({ name, input })
+      }
+      return output
+    }),
+})
+
 const withRecordingPlugin = testEffect(
   LayerNode.compile(LayerNode.group([promptRoot, testLLMServerNode]), [
     [SessionSummary.node, summary],
@@ -266,6 +280,16 @@ const withRecordingPlugin = testEffect(
     [MCP.node, makeMcp()],
     [RuntimeFlags.node, runtimeFlags],
     [Plugin.node, recordingPluginLayer],
+  ]),
+)
+
+const withRecordingBeforeAndAfterPlugin = testEffect(
+  LayerNode.compile(LayerNode.group([promptRoot, testLLMServerNode]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, recordingBeforeAndAfterPluginLayer],
   ]),
 )
 const withMcpInstructions = testEffect(
@@ -1090,7 +1114,16 @@ withRecordingPlugin.instance(
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
           const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
-          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return true
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool.callID
+        }),
+        "timed out waiting for running subtask metadata",
+      )
+      const callID = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+          const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool.callID
         }),
         "timed out waiting for running subtask metadata",
       )
@@ -1103,7 +1136,7 @@ withRecordingPlugin.instance(
       expect(taskCalls[0]).toEqual({
         tool: "task",
         sessionID: chat.id,
-        callID: expect.any(String),
+        callID,
         task: {
           subagentType: "general",
           parentModel: ref,
@@ -1178,14 +1211,14 @@ withRecordingPlugin.instance(
       yield* user(chat.id, "hello")
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* pollWithTimeout(
+      const callID = yield* pollWithTimeout(
         Effect.gen(function* () {
           const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
           const tool = assistant?.parts.find(
             (part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "task",
           )
-          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return true
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool.callID
         }),
         "timed out waiting for running task metadata",
       )
@@ -1198,12 +1231,41 @@ withRecordingPlugin.instance(
       expect(taskCalls[0]).toEqual({
         tool: "task",
         sessionID: chat.id,
-        callID: expect.any(String),
+        callID,
         task: {
           subagentType: "general",
           parentModel: ref,
         },
       })
+    }),
+  10_000,
+)
+
+withRecordingBeforeAndAfterPlugin.instance(
+  "subtask uses the same callID for task before and after hooks",
+  () =>
+    Effect.gen(function* () {
+      beforeAndAfterHookInputs.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.text("done")
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+
+      const taskHooks = beforeAndAfterHookInputs.filter(
+        (entry) =>
+          hookTool(entry.input, "task") &&
+          (entry.name === "tool.execute.before" || entry.name === "tool.execute.after"),
+      )
+      expect(taskHooks).toHaveLength(2)
+      const before = taskHooks.find((entry) => entry.name === "tool.execute.before")?.input as { callID: string }
+      const after = taskHooks.find((entry) => entry.name === "tool.execute.after")?.input as { callID: string }
+      expect(before.callID).toBe(after.callID)
     }),
   10_000,
 )
