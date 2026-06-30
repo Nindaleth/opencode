@@ -109,6 +109,11 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
+function hookTool(value: unknown, tool: string) {
+  if (typeof value !== "object" || value === null) return false
+  return "tool" in value && value.tool === tool
+}
+
 function makeMcp(instructions: MCP.ServerInstructions[] = []) {
   return Layer.succeed(
     MCP.Service,
@@ -242,6 +247,27 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const beforeHookInputs: unknown[] = []
+
+const recordingPluginLayer = Layer.mock(Plugin.Service)({
+  init: () => Effect.void,
+  list: () => Effect.succeed([]),
+  trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) =>
+    Effect.sync(() => {
+      if (name === "tool.execute.before") beforeHookInputs.push(input)
+      return output
+    }),
+})
+
+const withRecordingPlugin = testEffect(
+  LayerNode.compile(LayerNode.group([promptRoot, testLLMServerNode]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, recordingPluginLayer],
+  ]),
+)
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -849,6 +875,41 @@ it.instance("glob tool keeps instance context during prompt runs", () =>
   }),
 )
 
+withRecordingPlugin.instance("non-task tool before hook keeps generic shape", () =>
+  Effect.gen(function* () {
+    beforeHookInputs.length = 0
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Glob hook shape",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const file = path.join(dir, "probe.txt")
+    yield* writeText(file, "probe")
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "find text files" }],
+    })
+    yield* llm.tool("glob", { pattern: "**/*.txt" })
+    yield* llm.text("done")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+    expect(result.info.role).toBe("assistant")
+
+    const globCalls = beforeHookInputs.filter((input) => hookTool(input, "glob"))
+    expect(globCalls).toHaveLength(1)
+    expect(globCalls[0]).toEqual({
+      tool: "glob",
+      sessionID: session.id,
+      callID: expect.any(String),
+    })
+  }),
+)
+
 it.instance("loop continues when finish is stop but assistant has tool parts", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
@@ -1010,6 +1071,48 @@ it.instance(
   5_000,
 )
 
+withRecordingPlugin.instance(
+  "subtask receives one enriched task before hook",
+  () =>
+    Effect.gen(function* () {
+      beforeHookInputs.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+          const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return true
+        }),
+        "timed out waiting for running subtask metadata",
+      )
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+
+      const taskCalls = beforeHookInputs.filter((input) => hookTool(input, "task"))
+      expect(taskCalls).toHaveLength(1)
+      expect(taskCalls[0]).toEqual({
+        tool: "task",
+        sessionID: chat.id,
+        callID: expect.any(String),
+        task: {
+          subagentType: "general",
+          parentModel: ref,
+        },
+      })
+    }),
+  10_000,
+)
+
 it.instance(
   "running task tool preserves metadata after tool-call transition",
   () =>
@@ -1050,6 +1153,57 @@ it.instance(
 
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
+    }),
+  10_000,
+)
+
+withRecordingPlugin.instance(
+  "task tool receives one enriched before hook",
+  () =>
+    Effect.gen(function* () {
+      beforeHookInputs.length = 0
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.tool("task", {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+      })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
+          const tool = assistant?.parts.find(
+            (part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "task",
+          )
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return true
+        }),
+        "timed out waiting for running task metadata",
+      )
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+
+      const taskCalls = beforeHookInputs.filter((input) => hookTool(input, "task"))
+      expect(taskCalls).toHaveLength(1)
+      expect(taskCalls[0]).toEqual({
+        tool: "task",
+        sessionID: chat.id,
+        callID: expect.any(String),
+        task: {
+          subagentType: "general",
+          parentModel: ref,
+        },
+      })
     }),
   10_000,
 )
