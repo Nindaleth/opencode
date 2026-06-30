@@ -9,6 +9,7 @@ import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Plugin } from "@/plugin"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
 import type { SessionPrompt } from "../../src/session/prompt"
@@ -48,6 +49,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       SessionStatus.node,
       Truncate.node,
       ToolRegistry.node,
+      Plugin.node,
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
@@ -57,6 +59,51 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(layer())
 const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
+const pluginBeforeInputs: unknown[] = []
+
+const pluginOverrideLayer = Layer.mock(Plugin.Service)({
+  init: () => Effect.void,
+  list: () => Effect.succeed([]),
+  trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) =>
+    Effect.sync(() => {
+      if (name !== "tool.execute.before") return output
+      pluginBeforeInputs.push(input)
+      if (typeof output !== "object" || output === null) return output
+      Object.assign(output, {
+        model: {
+          providerID: "test",
+          modelID: "plugin-model",
+        },
+      })
+      return output
+    }),
+})
+
+const withPluginOverride = testEffect(
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      BackgroundJob.node,
+      EventV2Bridge.node,
+      Config.node,
+      CrossSpawnSpawner.node,
+      Session.node,
+      SessionProjector.node,
+      SessionRunState.node,
+      SessionStatus.node,
+      Truncate.node,
+      ToolRegistry.node,
+      Database.node,
+      RuntimeFlags.node,
+      Ripgrep.node,
+      Plugin.node,
+    ]),
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer()],
+      [Plugin.node, pluginOverrideLayer],
+    ],
+  ),
+)
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -249,10 +296,118 @@ describe("tool.task", () => {
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
       expect(result.metadata.sessionId).toBe(child.id)
+      expect(result.metadata.model).toEqual(ref)
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
+      expect(seen?.model).toEqual(ref)
       expect(seen?.variant).toBe("xhigh")
     }),
+  )
+
+  it.instance(
+    "execute uses configured subagent model before parent model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const expected = {
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("subagent-model"),
+        }
+        expect(result.metadata.model).toEqual(expected)
+        expect(seen?.model).toEqual(expected)
+        expect(seen?.variant).toBeUndefined()
+      }),
+    {
+      config: {
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
+  )
+
+  withPluginOverride.instance(
+    "execute uses plugin model override before configured subagent model",
+    () =>
+      Effect.gen(function* () {
+        pluginBeforeInputs.length = 0
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            callID: "call_task",
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const expected = {
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        }
+        expect(result.metadata.model).toEqual(expected)
+        expect(seen?.model).toEqual(expected)
+        expect(pluginBeforeInputs).toEqual([
+          {
+            tool: "task",
+            sessionID: chat.id,
+            callID: "call_task",
+            task: {
+              subagentType: "general",
+              parentModel: ref,
+            },
+          },
+        ])
+      }),
+    {
+      config: {
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
   )
 
   it.instance("execute asks by default and skips checks when bypassed", () =>

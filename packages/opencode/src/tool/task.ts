@@ -10,10 +10,13 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
+import { Plugin } from "@/plugin"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -84,6 +87,7 @@ export const TaskTool = Tool.define(
     const agent = yield* Agent.Service
     const background = yield* BackgroundJob.Service
     const config = yield* Config.Service
+    const plugin = yield* Plugin.Service
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
@@ -94,6 +98,34 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const variant = msg.info.variant
+      const hook: {
+        args: typeof params
+        model?: {
+          providerID: string
+          modelID: string
+        }
+      } = yield* plugin.trigger(
+        "tool.execute.before",
+        {
+          tool: id,
+          sessionID: ctx.sessionID,
+          callID: ctx.callID ?? "",
+          task: {
+            subagentType: params.subagent_type,
+            parentModel: {
+              providerID: msg.info.providerID,
+              modelID: msg.info.modelID,
+            },
+          },
+        },
+        { args: params },
+      )
       const runInBackground = params.background === true
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
@@ -171,17 +203,15 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
-        Effect.provideService(Database.Service, database),
-        Effect.orDie,
-      )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
-
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      const model = hook.model
+        ? {
+            providerID: ProviderV2.ID.make(hook.model.providerID),
+            modelID: ModelV2.ID.make(hook.model.modelID),
+          }
+        : (next.model ?? {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          })
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
