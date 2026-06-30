@@ -275,6 +275,18 @@ describe("SessionPrompt input schemas", () => {
     expect(() => decode({ sessionID })).toThrow()
   })
 
+  test("ShellInput accepts optional variant", () => {
+    const decode = decodeUnknown(SessionPrompt.ShellInput)
+    const expected = {
+      sessionID,
+      agent: "build",
+      command: "echo hi",
+      variant: "high",
+    }
+    const input: unknown = expected
+    expect(decode(input)).toEqual(expected)
+  })
+
   test("PromptInput accepts a text part and a file part", () => {
     const decode = decodeUnknown(SessionPrompt.PromptInput)
     const expected = {

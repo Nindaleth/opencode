@@ -1249,6 +1249,7 @@ function createLayer(input: StreamInput) {
                                 agent,
                                 model: next.model,
                                 command: next.prompt.text,
+                                variant: next.variant,
                               },
                               { signal: turn.signal, throwOnError: true },
                             ),
