@@ -169,6 +169,24 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("uses api model ID for the apply_patch heuristic when configured model ID is an alias", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      const tools = yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("alias-for-gpt5"),
+        apiModelID: ModelV2.ID.make("gpt-5.2"),
+        agent: yield* agents.defaultInfo(),
+      })
+
+      const ids = tools.map((tool) => tool.id)
+      expect(ids).toContain("apply_patch")
+      expect(ids).not.toContain("edit")
+      expect(ids).not.toContain("write")
+    }),
+  )
+
   withToolDefinitionContext.instance("tool.definition receives model and agent context", () =>
     Effect.gen(function* () {
       capturedToolDefinitionInputs.length = 0
