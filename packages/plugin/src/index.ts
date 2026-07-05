@@ -307,7 +307,13 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: { sessionID?: string; model: Model },
+    input: {
+      sessionID?: string
+      model: Model
+      agent?: string
+      hasAgentPrompt?: boolean
+      baseSystem?: string
+    },
     output: {
       system: string[]
     },
@@ -349,5 +355,14 @@ export interface Hooks {
   /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
-  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  "tool.definition"?: (
+    input: {
+      toolID: string
+      providerID?: string
+      modelID?: string
+      apiModelID?: string
+      agent?: string
+    },
+    output: { description: string; parameters: any },
+  ) => Promise<void>
 }
