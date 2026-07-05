@@ -131,7 +131,7 @@ export const PromptOverridesPlugin: Plugin = async (input: PluginInput, options?
       output.system[0] = replacement.content + output.system[0].slice(hookInput.baseSystem.length)
     },
     "tool.definition": async (hookInput, output) => {
-      if (!BUILTIN_TOOL_IDS.has(hookInput.toolID)) return
+      if (hookInput.builtin !== true || !BUILTIN_TOOL_IDS.has(hookInput.toolID)) return
       const entries = resolved.tool[hookInput.toolID]
       if (!entries) return
       const replacement = findReplacement(entries, toolCandidates(hookInput))
@@ -141,4 +141,4 @@ export const PromptOverridesPlugin: Plugin = async (input: PluginInput, options?
   }
 }
 
-export default { server: PromptOverridesPlugin } satisfies PluginModule
+export default { id: "prompt-overrides", server: PromptOverridesPlugin } satisfies PluginModule
