@@ -204,6 +204,7 @@ describe("tool.registry", () => {
           item,
         ): item is {
           toolID: string
+          builtin?: boolean
           providerID?: string
           modelID?: string
           apiModelID?: string
@@ -212,6 +213,7 @@ describe("tool.registry", () => {
       )
       expect(read).toMatchObject({
         toolID: "read",
+        builtin: true,
         providerID: "test-provider",
         modelID: "configured-model",
         apiModelID: "api-model",
