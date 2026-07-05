@@ -55,20 +55,25 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
+  const baseSystem = input.agent.prompt
+    ? input.agent.prompt
+    : SystemPrompt.provider(input.model)
+        .filter((x) => x)
+        .join("\n")
   const system = [
-    [
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-      ...input.system,
-      ...(input.user.system ? [input.user.system] : []),
-    ]
-      .filter((x) => x)
-      .join("\n"),
+    [baseSystem, ...input.system, ...(input.user.system ? [input.user.system] : [])].filter((x) => x).join("\n"),
   ]
 
   const header = system[0]
   yield* input.plugin.trigger(
     "experimental.chat.system.transform",
-    { sessionID: input.sessionID, model: input.model },
+    {
+      sessionID: input.sessionID,
+      model: input.model,
+      agent: input.agent.name,
+      hasAgentPrompt: input.agent.prompt ? true : false,
+      baseSystem,
+    },
     { system },
   )
   if (system.length > 2 && system[0] === header) {

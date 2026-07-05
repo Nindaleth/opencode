@@ -50,6 +50,21 @@ const brokenPluginLayer = Layer.succeed(
   }),
 )
 
+function captureToolDefinitionLayer(captured: unknown[]) {
+  return Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      init: () => Effect.void,
+      trigger: ((name: string, input: unknown, output: unknown) =>
+        Effect.sync(() => {
+          if (name === "tool.definition") captured.push(input)
+          return output
+        })) as Plugin.Interface["trigger"],
+      list: () => Effect.succeed([]),
+    }),
+  )
+}
+
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
   [Config.node, configLayer],
@@ -94,6 +109,10 @@ const withEmptyCodeMode = testEffect(
   ]),
 )
 const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
+const capturedToolDefinitionInputs: unknown[] = []
+const withToolDefinitionContext = testEffect(
+  LayerNode.compile(root, [...replacements, [Plugin.node, captureToolDefinitionLayer(capturedToolDefinitionInputs)]]),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -147,6 +166,39 @@ describe("tool.registry", () => {
       })
 
       expect(tools.map((tool) => tool.id)).not.toContain("execute")
+    }),
+  )
+
+  withToolDefinitionContext.instance("tool.definition receives model and agent context", () =>
+    Effect.gen(function* () {
+      capturedToolDefinitionInputs.length = 0
+      const registry = yield* ToolRegistry.Service
+      const agents = yield* Agent.Service
+      yield* registry.tools({
+        providerID: ProviderV2.ID.make("test-provider"),
+        modelID: ModelV2.ID.make("configured-model"),
+        apiModelID: ModelV2.ID.make("api-model"),
+        agent: yield* agents.defaultInfo(),
+      })
+
+      const read = capturedToolDefinitionInputs.find(
+        (
+          item,
+        ): item is {
+          toolID: string
+          providerID?: string
+          modelID?: string
+          apiModelID?: string
+          agent?: string
+        } => typeof item === "object" && item !== null && (item as { toolID?: string }).toolID === "read",
+      )
+      expect(read).toMatchObject({
+        toolID: "read",
+        providerID: "test-provider",
+        modelID: "configured-model",
+        apiModelID: "api-model",
+        agent: "build",
+      })
     }),
   )
 
