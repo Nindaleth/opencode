@@ -76,6 +76,7 @@ export interface Interface {
   readonly tools: (model: {
     providerID: ProviderV2.ID
     modelID: ModelV2.ID
+    apiModelID?: ModelV2.ID
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
   }) => Effect.Effect<Tool.Def[]>
@@ -310,7 +311,17 @@ const layer = Layer.effect(
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
           }
-          yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          yield* plugin.trigger(
+            "tool.definition",
+            {
+              toolID: tool.id,
+              providerID: input.providerID,
+              modelID: input.modelID,
+              apiModelID: input.apiModelID,
+              agent: input.agent.name,
+            },
+            output,
+          )
           const jsonSchema =
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
