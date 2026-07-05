@@ -358,6 +358,7 @@ export interface Hooks {
   "tool.definition"?: (
     input: {
       toolID: string
+      builtin?: boolean
       providerID?: string
       modelID?: string
       apiModelID?: string

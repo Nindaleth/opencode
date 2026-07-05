@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
-import {
+import promptOverridesModule, {
   BUILTIN_TOOL_IDS,
   findReplacement,
   loadOptions,
@@ -44,6 +44,10 @@ describe("prompt override plugin", () => {
     expect(BUILTIN_TOOL_IDS.has("apply_patch")).toBe(true)
     expect(BUILTIN_TOOL_IDS.has("execute")).toBe(true)
     expect(BUILTIN_TOOL_IDS.has("made_up_tool")).toBe(false)
+  })
+
+  test("exports a plugin module id for direct path loading", () => {
+    expect(promptOverridesModule.id).toBe("prompt-overrides")
   })
 
   test("builds model and tool match candidates", () => {
@@ -153,6 +157,7 @@ describe("prompt override plugin", () => {
     await hooks["tool.definition"]?.(
       {
         toolID: "read",
+        builtin: true,
         providerID: "test-provider",
         modelID: "configured-model",
         apiModelID: "api-model",
@@ -162,5 +167,29 @@ describe("prompt override plugin", () => {
     )
 
     expect(output.description).toBe("read replacement")
+  })
+
+  test("ignores non-built-in tool hook inputs even when the id matches a built-in name", async () => {
+    await using tmp = await tmpdir()
+    const hooks = await PromptOverridesPlugin(pluginInput(tmp.path), {
+      tool: {
+        read: [{ match: "test-provider/api-*", text: "read replacement" }],
+      },
+    })
+    const output = { description: "custom read original", parameters: {} }
+
+    await hooks["tool.definition"]?.(
+      {
+        toolID: "read",
+        builtin: false,
+        providerID: "test-provider",
+        modelID: "configured-model",
+        apiModelID: "api-model",
+        agent: "build",
+      },
+      output,
+    )
+
+    expect(output.description).toBe("custom read original")
   })
 })

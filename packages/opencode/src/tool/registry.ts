@@ -69,6 +69,11 @@ type State = {
   read: ReadDef
 }
 
+type VisibleTool = {
+  def: Tool.Def
+  builtin: boolean
+}
+
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
@@ -285,36 +290,43 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const filtered = (yield* all()).filter((tool) => {
-        if (tool.id === WebSearchTool.id) {
+      const s = yield* InstanceState.get(state)
+      const all = [
+        ...s.builtin.map((def) => ({ def, builtin: true })),
+        ...s.custom.map((def) => ({ def, builtin: false })),
+      ] satisfies VisibleTool[]
+
+      const filtered = all.filter((tool) => {
+        if (tool.def.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
         const toolModelID = input.apiModelID ?? input.modelID
         const usePatch = toolModelID.includes("gpt-") && !toolModelID.includes("oss") && !toolModelID.includes("gpt-4")
-        if (tool.id === ApplyPatchTool.id) return usePatch
-        if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
+        if (tool.def.id === ApplyPatchTool.id) return usePatch
+        if (tool.def.id === EditTool.id || tool.def.id === WriteTool.id) return !usePatch
 
         return true
       })
 
-      const codeModeDescription = filtered.some((tool) => tool.id === "execute")
+      const codeModeDescription = filtered.some((tool) => tool.def.id === "execute")
         ? yield* describeCodeMode(input)
         : undefined
-      const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
+      const visible = filtered.filter((tool) => tool.def.id !== "execute" || codeModeDescription)
 
       return yield* Effect.forEach(
         visible,
-        Effect.fnUntraced(function* (tool: Tool.Def) {
+        Effect.fnUntraced(function* (tool: VisibleTool) {
           const output = {
-            description: tool.description,
-            parameters: tool.parameters,
-            jsonSchema: tool.jsonSchema,
+            description: tool.def.description,
+            parameters: tool.def.parameters,
+            jsonSchema: tool.def.jsonSchema,
           }
           yield* plugin.trigger(
             "tool.definition",
             {
-              toolID: tool.id,
+              toolID: tool.def.id,
+              builtin: tool.builtin,
               providerID: input.providerID,
               modelID: input.modelID,
               apiModelID: input.apiModelID,
@@ -323,22 +335,22 @@ const layer = Layer.effect(
             output,
           )
           const jsonSchema =
-            output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
+            output.parameters === tool.def.parameters || output.jsonSchema !== tool.def.jsonSchema
               ? output.jsonSchema
               : undefined
           return {
-            id: tool.id,
+            id: tool.def.id,
             description: [
               output.description,
-              tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
-              tool.id === "execute" ? codeModeDescription : undefined,
+              tool.def.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
+              tool.def.id === "execute" ? codeModeDescription : undefined,
             ]
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
             jsonSchema,
-            execute: tool.execute,
-            formatValidationError: tool.formatValidationError,
+            execute: tool.def.execute,
+            formatValidationError: tool.def.formatValidationError,
           }
         }),
         { concurrency: "unbounded" },
