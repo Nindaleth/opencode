@@ -113,7 +113,41 @@ def strip_jsonc(text: str) -> str:
             continue
         result.append(char)
         i += 1
-    return re.sub(r",\s*([}\]])", r"\1", "".join(result))
+    return strip_trailing_commas("".join(result))
+
+
+def strip_trailing_commas(text: str) -> str:
+    result: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if in_string:
+            result.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            i += 1
+            continue
+        if char == ",":
+            j = i + 1
+            while j < len(text) and text[j] in " \t\r\n":
+                j += 1
+            if j < len(text) and text[j] in "}]":
+                i += 1
+                continue
+        result.append(char)
+        i += 1
+    return "".join(result)
 
 
 def load_jsonc(path: Path) -> dict[str, Any]:
@@ -374,9 +408,18 @@ def source_content(source: dict[str, Any], config_dir: Path, label: str) -> tupl
 
 def override_options(config: dict[str, Any]) -> dict[str, Any] | None:
     for item in config.get("plugin", []) if isinstance(config.get("plugin", []), list) else []:
-        if isinstance(item, list) and len(item) == 2 and isinstance(item[1], dict):
-            if "model" in item[1] or "tool" in item[1]:
-                return item[1]
+        if not (isinstance(item, list) and item and isinstance(item[0], str)):
+            continue
+        spec_name = Path(item[0]).name.lower()
+        is_package_spec = spec_name == "prompt-overrides" or spec_name.startswith("prompt-overrides@")
+        is_path_spec = Path(spec_name).stem == "prompt-overrides"
+        if not (is_package_spec or is_path_spec):
+            continue
+        if len(item) != 2:
+            raise ValueError("Malformed prompt-overrides plugin tuple")
+        if not isinstance(item[1], dict):
+            raise ValueError("Malformed prompt-overrides plugin options")
+        return item[1]
     return None
 
 
@@ -439,7 +482,7 @@ def render(config: dict[str, Any], config_dir: Path, provider: str, model: str, 
     ]
     document = RenderedPrompt(system="\n".join(section for section in sections if section), tools=tool_descriptions())
     if source == "overrides":
-        return apply_overrides(document, config, config_dir, provider, model, api_id, prompt is not None, base)
+        return apply_overrides(document, config, config_dir, provider, model, api_id, bool(prompt), base)
     return document
 
 
