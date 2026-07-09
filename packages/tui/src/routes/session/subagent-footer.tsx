@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
@@ -16,19 +16,26 @@ export function SubagentFooter() {
 
   const subagentInfo = createMemo(() => {
     const s = session()
-    if (!s) return { label: "Subagent", index: 0, total: 0 }
+    if (!s) return { label: "Subagent", index: 0, total: 0, variant: undefined }
     const agentMatch = s.title.match(/@(\w+) subagent/)
     const label = agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
 
-    if (!s.parentID) return { label, index: 0, total: 0 }
+    if (!s.parentID) return { label, index: 0, total: 0, variant: s.model?.variant }
 
     const siblings = sync.data.session
       .filter((x) => x.parentID === s.parentID)
       .toSorted((a, b) => a.time.created - b.time.created)
     const index = siblings.findIndex((x) => x.id === s.id)
 
-    return { label, index: index + 1, total: siblings.length }
+    return { label, index: index + 1, total: siblings.length, variant: s.model?.variant }
   })
+  const footerSegments = createMemo(() =>
+    formatSubagentFooterSegments({
+      label: subagentInfo().label,
+      count: subagentInfo().total > 0 ? `${subagentInfo().index} of ${subagentInfo().total}` : undefined,
+      variant: subagentInfo().variant,
+    }),
+  )
 
   const usage = createMemo(() => {
     const msg = messages()
@@ -77,14 +84,26 @@ export function SubagentFooter() {
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>
-              <b>{subagentInfo().label}</b>
-            </text>
-            <Show when={subagentInfo().total > 0}>
-              <text style={{ fg: theme.textMuted }}>
-                ({subagentInfo().index} of {subagentInfo().total})
-              </text>
-            </Show>
+            <For each={footerSegments()}>
+              {(segment, index) => (
+                <text fg={index() === 0 ? theme.text : theme.textMuted}>
+                  <Show
+                    when={index() === 0}
+                    fallback={
+                      subagentInfo().variant && index() === footerSegments().length - 1 ? (
+                        <>
+                          · <span style={{ fg: theme.warning }}>{segment}</span>
+                        </>
+                      ) : (
+                        segment
+                      )
+                    }
+                  >
+                    <b>{segment}</b>
+                  </Show>
+                </text>
+              )}
+            </For>
             <Show when={usage()}>
               {(item) => (
                 <text fg={theme.textMuted} wrapMode="none">
@@ -129,4 +148,8 @@ export function SubagentFooter() {
       </box>
     </box>
   )
+}
+
+export function formatSubagentFooterSegments(input: { label: string; count?: string; variant?: string }) {
+  return [input.label, input.count, input.variant].filter((item) => item !== undefined)
 }
