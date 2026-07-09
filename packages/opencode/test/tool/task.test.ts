@@ -638,6 +638,241 @@ describe("tool.task", () => {
     },
   )
 
+  it.instance("schema exposes model and variant parameters", () =>
+    Effect.gen(function* () {
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const schema = def.jsonSchema as { properties?: Record<string, unknown> } | undefined
+      expect(schema?.properties?.model).toBeDefined()
+      expect(schema?.properties?.variant).toBeDefined()
+    }),
+  )
+
+  it.instance(
+    "execute uses explicit model param over configured subagent model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            model: "test/plugin-model",
+            variant: "high",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const expected = {
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("plugin-model"),
+        }
+        expect(result.metadata.model).toEqual(expected)
+        expect(seen?.model).toEqual(expected)
+        expect(seen?.variant).toBe("high")
+      }),
+    {
+      config: {
+        ...providerConfig,
+        agent: {
+          general: {
+            model: "test/subagent-model",
+          },
+        },
+      },
+    },
+  )
+
+  withPluginOverride.instance(
+    "execute explicit model param wins over plugin override",
+    () =>
+      Effect.gen(function* () {
+        pluginOverrideModel = {
+          providerID: "test",
+          modelID: "plugin-model",
+          variant: "high",
+        }
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        const result = yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            model: "test/test-model",
+            variant: "xhigh",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            callID: "call_task_explicit_over_plugin",
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        const expected = {
+          providerID: ProviderV2.ID.make("test"),
+          modelID: ModelV2.ID.make("test-model"),
+        }
+        expect(result.metadata.model).toEqual(expected)
+        expect(seen?.model).toEqual(expected)
+        expect(seen?.variant).toBe("xhigh")
+      }),
+    {
+      config: providerConfig,
+    },
+  )
+
+  it.instance(
+    "execute applies explicit variant to inherited parent model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let seen: SessionPrompt.PromptInput | undefined
+        const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+        yield* def.execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            variant: "high",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(seen?.model).toEqual(ref)
+        expect(seen?.variant).toBe("high")
+      }),
+    {
+      config: providerConfig,
+    },
+  )
+
+  it.instance(
+    "execute fails on unknown explicit model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let prompted = false
+
+        const exit = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+              model: "test/missing-model",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: {
+                promptOps: stubOps({
+                  onPrompt: () => {
+                    prompted = true
+                  },
+                }),
+              },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(prompted).toBe(false)
+      }),
+    {
+      config: providerConfig,
+    },
+  )
+
+  it.instance(
+    "execute fails on invalid explicit variant",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        let prompted = false
+
+        const exit = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+              model: "test/plugin-model",
+              variant: "xhigh",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: {
+                promptOps: stubOps({
+                  onPrompt: () => {
+                    prompted = true
+                  },
+                }),
+              },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(prompted).toBe(false)
+      }),
+    {
+      config: providerConfig,
+    },
+  )
+
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
