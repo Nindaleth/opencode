@@ -491,6 +491,7 @@ const layer = Layer.effect(
               parentID: userMsg.id,
               mode: input.agent,
               agent: input.agent,
+              variant: userMsg.model.variant,
               cost: 0,
               path: { cwd: ctx.directory, root: ctx.worktree },
               time: { created: Date.now() },
