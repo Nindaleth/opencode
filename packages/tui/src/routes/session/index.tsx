@@ -1471,6 +1471,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
+  const footerSegments = createMemo(() =>
+    formatAssistantFooterSegments({
+      mode: props.message.mode,
+      model: model(),
+      variant: props.message.variant,
+      duration: duration() ? Locale.duration(duration()) : undefined,
+      interrupted: props.message.error?.name === "MessageAbortedError",
+    }),
+  )
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
@@ -1545,20 +1554,50 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               >
                 ▣{" "}
               </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
+              <For each={footerSegments()}>
+                {(segment, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <span style={{ fg: theme.textMuted }}> · </span>
+                    </Show>
+                    <span
+                      style={{
+                        fg:
+                          props.message.variant && index() === 2
+                            ? theme.warning
+                            : index() === 0
+                              ? theme.text
+                              : theme.textMuted,
+                        bold: props.message.variant !== undefined && index() === 2,
+                      }}
+                    >
+                      {segment}
+                    </span>
+                  </>
+                )}
+              </For>
             </text>
           </box>
         </Match>
       </Switch>
     </>
   )
+}
+
+export function formatAssistantFooterSegments(input: {
+  mode: string
+  model: string
+  variant?: string
+  duration?: string
+  interrupted?: boolean
+}) {
+  return [
+    Locale.titlecase(input.mode),
+    input.model,
+    input.variant,
+    input.duration,
+    input.interrupted ? "interrupted" : undefined,
+  ].filter((item) => item !== undefined)
 }
 
 const PART_MAPPING = {
