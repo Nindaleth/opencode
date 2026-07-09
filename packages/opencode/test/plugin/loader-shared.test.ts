@@ -232,6 +232,38 @@ describe("plugin.loader.shared", () => {
     ),
   )
 
+  it.live("loads configured prompt-overrides without npm install", () =>
+    withTmp(
+      async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify(
+            {
+              plugin: [["prompt-overrides", { model: { text: "replacement prompt" } }]],
+            },
+            null,
+            2,
+          ),
+        )
+        return {}
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockRejectedValue(new Error("should not install prompt-overrides"))
+
+          try {
+            const hooks = yield* load(tmp.path)
+            expect(hooks).toHaveLength(1)
+            expect(hooks[0]!["experimental.chat.system.transform"]).toBeDefined()
+            expect(hooks[0]!["tool.definition"]).toBeDefined()
+            expect(install).not.toHaveBeenCalled()
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
+
   it.live("still sends unknown configured plugin specs through npm resolution", () =>
     withTmp(
       async (dir) => {
