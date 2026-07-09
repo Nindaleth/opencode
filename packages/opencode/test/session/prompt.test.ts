@@ -1791,6 +1791,12 @@ unixNoLLMServer(
         modelID: ref.modelID,
         variant: "high",
       })
+
+      const shellAssistant = msgs.findLast((item) => item.info.role === "assistant")
+      expect(shellAssistant?.info.role).toBe("assistant")
+      if (!shellAssistant || shellAssistant.info.role !== "assistant") return
+
+      expect(shellAssistant.info.variant).toBe("high")
     }),
   { config: cfg },
 )
