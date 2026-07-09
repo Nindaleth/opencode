@@ -327,6 +327,7 @@ const cfg = {
           limit: { context: 100000, output: 10000 },
           cost: { input: 0, output: 0 },
           options: {},
+          variants: { high: { reasoningEffort: "high" } },
         },
       },
       options: {
@@ -1885,6 +1886,11 @@ it.instance("loop after shell uses the preserved shell variant", () =>
       noReply: true,
       parts: [{ type: "text", text: "after shell" }],
     })
+    const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+    const lastUser = messages.findLast((item) => item.info.role === "user")
+    expect(lastUser?.info.role).toBe("user")
+    if (!lastUser || lastUser.info.role !== "user") return
+    expect(lastUser.info.model.variant).toBe("high")
     yield* llm.text("done")
 
     const result = yield* prompt.loop({ sessionID: chat.id })
@@ -1892,8 +1898,7 @@ it.instance("loop after shell uses the preserved shell variant", () =>
 
     const inputs = yield* llm.inputs
     const last = inputs.at(-1)
-    expect(last?.providerOptions).toBeDefined()
-    expect(JSON.stringify(last)).toContain("high")
+    expect(last?.reasoning_effort).toBe("high")
   }),
 )
 

@@ -642,7 +642,13 @@ const layer = Layer.effect(
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      const current = yield* currentModel(input.sessionID)
+      const model =
+        input.model ??
+        (ag.model && current.providerID === ag.model.providerID && current.modelID === ag.model.modelID
+          ? current
+          : ag.model) ??
+        current
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -650,7 +656,14 @@ const layer = Layer.effect(
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const currentVariant =
+        current.providerID === model.providerID &&
+        current.modelID === model.modelID &&
+        "variant" in current &&
+        typeof current.variant === "string"
+          ? current.variant
+          : undefined
+      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : currentVariant)
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -668,12 +681,12 @@ const layer = Layer.effect(
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (
-        current.agent !== info.agent ||
-        current.model?.providerID !== info.model.providerID ||
-        current.model?.id !== info.model.modelID ||
-        (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
+        session.agent !== info.agent ||
+        session.model?.providerID !== info.model.providerID ||
+        session.model?.id !== info.model.modelID ||
+        (session.model?.variant === "default" ? undefined : session.model?.variant) !== info.model.variant
       ) {
         yield* sessions.setAgentModel({
           sessionID: input.sessionID,
