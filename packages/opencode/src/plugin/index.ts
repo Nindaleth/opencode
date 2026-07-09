@@ -33,6 +33,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import PromptOverridesPlugin from "./prompt-overrides"
 import SubagentRouterPlugin from "./subagent-router"
 
 type State = {
@@ -85,7 +86,10 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
   ]
 }
 
-const configuredBuiltinPlugins = new Map<string, PluginModule>([["subagent-router", SubagentRouterPlugin]])
+const configuredBuiltinPlugins = new Map<string, PluginModule>([
+  ["prompt-overrides", PromptOverridesPlugin],
+  ["subagent-router", SubagentRouterPlugin],
+])
 
 function configuredBuiltinPlugin(spec: string) {
   return configuredBuiltinPlugins.get(spec)
