@@ -45,7 +45,7 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
     const plugins = config.plugin ?? []
     return yield* Effect.gen(function* () {
       const plugin = yield* Plugin.Service
-      yield* plugin.list()
+      return yield* plugin.list()
     }).pipe(
       Effect.provide(
         LayerNode.compile(Plugin.node, [
@@ -169,6 +169,163 @@ describe("plugin.loader.shared", () => {
         Effect.gen(function* () {
           yield* load(tmp.path)
           expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("default")
+        }),
+    ),
+  )
+
+  it.live("loads configured subagent-router without npm install", () =>
+    withTmp(
+      async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify(
+            {
+              plugin: [
+                [
+                  "subagent-router",
+                  {
+                    rules: [{ subagent: "explore", parentModel: "anthropic/*", model: "openai/gpt-5-mini" }],
+                  },
+                ],
+              ],
+            },
+            null,
+            2,
+          ),
+        )
+        return {}
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockRejectedValue(new Error("should not install subagent-router"))
+
+          try {
+            const hooks = yield* load(tmp.path)
+            expect(hooks).toHaveLength(1)
+            const before = hooks[0]!["tool.execute.before"]
+            expect(before).toBeDefined()
+            const output: {
+              args: Record<string, unknown>
+              model?: { providerID: string; modelID: string; variant?: string }
+            } = { args: {} }
+            yield* Effect.promise(() =>
+              before!(
+                {
+                  tool: "task",
+                  sessionID: "ses_test",
+                  callID: "call_test",
+                  task: {
+                    subagentType: "explore",
+                    parentModel: { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+                  },
+                },
+                output,
+              ),
+            )
+
+            expect(output.model).toEqual({ providerID: "openai", modelID: "gpt-5-mini", variant: undefined })
+            expect(install).not.toHaveBeenCalled()
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
+
+  it.live("still sends unknown configured plugin specs through npm resolution", () =>
+    withTmp(
+      async (dir) => {
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["acme-plugin@1.0.0"] }, null, 2))
+        return {}
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockRejectedValue(new Error("expected external install path"))
+
+          try {
+            const hooks = yield* load(tmp.path)
+            expect(hooks).toEqual([])
+            expect(install).toHaveBeenCalledWith("acme-plugin@1.0.0")
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
+
+  it.live("preserves config order across mixed external and configured built-in plugins", () =>
+    withTmp(
+      async (dir) => {
+        const file = path.join(dir, "external-plugin.ts")
+        await Bun.write(
+          file,
+          [
+            "export default {",
+            '  id: "demo.external-order",',
+            "  server: async () => ({",
+            '    "tool.execute.before": async (_input, output) => {',
+            "      output.args.order = [",
+            "        ...((output.args.order as string[] | undefined) ?? []),",
+            '        output.model ? "after-builtin" : "before-builtin",',
+            "      ]",
+            "    },",
+            "  }),",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify(
+            {
+              plugin: [
+                pathToFileURL(file).href,
+                [
+                  "subagent-router",
+                  {
+                    rules: [{ subagent: "explore", parentModel: "anthropic/*", model: "openai/gpt-5-mini" }],
+                  },
+                ],
+              ],
+            },
+            null,
+            2,
+          ),
+        )
+
+        return {}
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const hooks = yield* load(tmp.path)
+          expect(hooks).toHaveLength(2)
+          const output: {
+            args: Record<string, unknown>
+            model?: { providerID: string; modelID: string; variant?: string }
+          } = { args: {} }
+
+          for (const hook of hooks) {
+            const before = hook["tool.execute.before"]
+            if (!before) continue
+            yield* Effect.promise(() =>
+              before(
+                {
+                  tool: "task",
+                  sessionID: "ses_test",
+                  callID: "call_test",
+                  task: {
+                    subagentType: "explore",
+                    parentModel: { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+                  },
+                },
+                output,
+              ),
+            )
+          }
+
+          expect(output.args.order).toEqual(["before-builtin"])
+          expect(output.model).toEqual({ providerID: "openai", modelID: "gpt-5-mini", variant: undefined })
         }),
     ),
   )
