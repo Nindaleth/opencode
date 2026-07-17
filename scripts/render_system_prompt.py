@@ -150,8 +150,24 @@ def strip_trailing_commas(text: str) -> str:
     return "".join(result)
 
 
+def substitute_environment(text: str) -> str:
+    missing: set[str] = set()
+
+    def replacement(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name in os.environ:
+            return os.environ[name]
+        missing.add(name)
+        return match.group(0)
+
+    result = re.sub(r"\{env:([^}]+)\}", replacement, text)
+    if missing:
+        raise ValueError(f"Missing environment variables: {', '.join(sorted(missing))}")
+    return result
+
+
 def load_jsonc(path: Path) -> dict[str, Any]:
-    parsed = json.loads(strip_jsonc(path.read_text(encoding="utf-8")))
+    parsed = json.loads(strip_jsonc(substitute_environment(path.read_text(encoding="utf-8"))))
     if not isinstance(parsed, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return parsed
