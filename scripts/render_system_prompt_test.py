@@ -1,7 +1,9 @@
+import os
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import render_system_prompt as rsp
 
@@ -41,6 +43,51 @@ class RenderSystemPromptTest(unittest.TestCase):
             )
 
             self.assertEqual(rsp.load_jsonc(config)["message"], ", }")
+
+    def test_load_jsonc_expands_environment_variable_in_override_file_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.dict(os.environ, {"RENDERER_TEST_DIR": str(root)}, clear=False):
+                (root / "task.txt").write_text("task replacement", encoding="utf-8")
+                config = root / "opencode.jsonc"
+                config.write_text(
+                    '''
+                    {
+                      "plugin": [["./prompt-overrides.ts", {
+                        "tool": { "task": { "file": "{env:RENDERER_TEST_DIR}/task.txt" } }
+                      }]]
+                    }
+                    ''',
+                    encoding="utf-8",
+                )
+
+                result = rsp.apply_overrides(
+                    rsp.RenderedPrompt(system="base", tools={"task": "task original"}),
+                    rsp.load_jsonc(config),
+                    root,
+                    provider="test-provider",
+                    model="configured-model",
+                    api_id="api-model",
+                    agent_has_prompt=False,
+                    base_system="base",
+                )
+
+                self.assertEqual(result.tools["task"], "task replacement")
+
+    def test_load_jsonc_reports_all_missing_environment_variables(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with tempfile.TemporaryDirectory() as tmp:
+                config = Path(tmp) / "opencode.jsonc"
+                config.write_text(
+                    '{ "first": "{env:RENDERER_MISSING_FIRST}", "second": "{env:RENDERER_MISSING_SECOND}" }',
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "Missing environment variables: RENDERER_MISSING_FIRST, RENDERER_MISSING_SECOND",
+                ):
+                    rsp.load_jsonc(config)
 
     def test_model_candidates_match_runtime_plugin_shape(self):
         self.assertEqual(
