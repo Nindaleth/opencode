@@ -1471,12 +1471,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
+  const tokenMetadata = createMemo(() =>
+    formatAssistantTokenMetadata({
+      output: props.message.tokens.output,
+      created: props.message.time.created,
+      completed: props.message.time.completed,
+    }),
+  )
   const footerSegments = createMemo(() =>
     formatAssistantFooterSegments({
       mode: props.message.mode,
       model: model(),
       variant: props.message.variant,
       duration: duration() ? Locale.duration(duration()) : undefined,
+      tokens: tokenMetadata().tokens,
+      throughput: tokenMetadata().throughput,
       interrupted: props.message.error?.name === "MessageAbortedError",
     }),
   )
@@ -1584,11 +1593,26 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   )
 }
 
+export function formatAssistantTokenMetadata(input: { output: number; created: number; completed?: number }) {
+  if (input.completed === undefined) return {}
+
+  const tokens = `${Locale.number(input.output)} tokens`
+  const duration = input.completed - input.created
+  if (input.output <= 0 || duration <= 0) return { tokens }
+
+  return {
+    tokens,
+    throughput: `${Locale.number(Math.round((input.output * 1000) / duration))} tk/s`,
+  }
+}
+
 export function formatAssistantFooterSegments(input: {
   mode: string
   model: string
   variant?: string
   duration?: string
+  tokens?: string
+  throughput?: string
   interrupted?: boolean
 }) {
   return [
@@ -1596,6 +1620,8 @@ export function formatAssistantFooterSegments(input: {
     input.model,
     input.variant,
     input.duration,
+    input.tokens,
+    input.throughput,
     input.interrupted ? "interrupted" : undefined,
   ].filter((item) => item !== undefined)
 }
