@@ -582,6 +582,7 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
+      if (code !== null) output += `\n\nCommand exited with code ${code}.`
       return {
         title: input.command,
         metadata: {
