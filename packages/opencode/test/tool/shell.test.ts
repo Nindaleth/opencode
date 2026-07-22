@@ -1101,6 +1101,7 @@ describe("tool.shell abort", () => {
           command: `exit 42`,
         })
         expect(result.metadata.exit).toBe(42)
+        expect(result.output).toBe("(no output)\n\nCommand exited with code 42.")
       }),
     ),
   )
