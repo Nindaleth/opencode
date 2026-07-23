@@ -34,7 +34,7 @@ export function DialogSkill(props: DialogSkillProps) {
 
   const options = createMemo<DialogSelectOption<string>[]>(() => {
     if (showError()) return []
-    const list = skills() ?? []
+    const list = (skills() ?? []).toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
     return list.map((skill) => ({
       title: skill.name.padEnd(maxWidth),
