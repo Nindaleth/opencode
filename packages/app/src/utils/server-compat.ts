@@ -270,6 +270,7 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
           command: value.command,
           agent: value.agent,
           model: value.model,
+          variant: value.variant,
         })
       },
       compact: async (value: SessionCompactInput & { model?: LegacyPrompt["model"] }) => {

@@ -129,6 +129,25 @@ describe("createCompatibleApi", () => {
     ])
   })
 
+  test("forwards shell variants to the V1 session API", async () => {
+    const { api, requests } = setup("v1")
+    await api.session.shell({
+      sessionID: "ses_1",
+      command: "pwd",
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+      variant: "high",
+    })
+
+    expect(new URL(requests[0]!.url).pathname).toBe("/session/ses_1/shell")
+    expect(await requests[0]!.json()).toMatchObject({
+      command: "pwd",
+      agent: "build",
+      model: { providerID: "provider", modelID: "model" },
+      variant: "high",
+    })
+  })
+
   test("resolves protocol detection once across implementation methods", async () => {
     let detections = 0
     const resolved = Promise.resolve<"v1" | "v2">("v2")
