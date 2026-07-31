@@ -945,6 +945,61 @@ describe("tool.task", () => {
   )
 
   it.instance(
+    "qualifies suggestions for an unknown explicit task model",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const exit = yield* def
+          .execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+              model: "github-copilot/opus-5",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps: stubOps() },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+          .pipe(Effect.exit)
+
+        if (!Exit.isFailure(exit)) throw new Error("Expected explicit model lookup to fail")
+        const error = Cause.prettyErrors(exit.cause)[0]
+        expect(error.message).toContain("github-copilot/claude-opus-5")
+      }),
+    {
+      config: {
+        provider: {
+          ...providerConfig.provider,
+          "github-copilot": {
+            name: "GitHub Copilot",
+            id: "github-copilot",
+            env: [],
+            npm: "@ai-sdk/openai-compatible",
+            models: {
+              "claude-opus-5": {
+                id: "claude-opus-5",
+                name: "Claude Opus 5",
+                ...baseProviderModel,
+              },
+            },
+            options: { apiKey: "test-key", baseURL: "http://localhost:1/v1" },
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
     "execute fails on invalid explicit variant",
     () =>
       Effect.gen(function* () {
