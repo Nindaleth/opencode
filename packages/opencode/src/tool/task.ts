@@ -222,18 +222,7 @@ export const TaskTool = Tool.define(
               return yield* Effect.fail(
                 new Error(`Invalid model "${params.model}". Expected "provider_id/model_id" format`),
               )
-            return yield* provider.getModel(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)).pipe(
-              Effect.catchIf(Provider.ModelNotFoundError.isInstance, (error) =>
-                Effect.fail(
-                  new Provider.ModelNotFoundError({
-                    ...error,
-                    ...(error.suggestions
-                      ? { suggestions: error.suggestions.map((suggestion) => `${providerID}/${suggestion}`) }
-                      : {}),
-                  }),
-                ),
-              ),
-            )
+            return yield* provider.getModel(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))
           })
         : undefined
       const pluginModel =
