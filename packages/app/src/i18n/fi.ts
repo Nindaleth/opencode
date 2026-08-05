@@ -851,6 +851,8 @@ export const dict = {
     "Vaihda agenttien välillä viestikentässä. Kun valinta on piilotettu, Build-agenttia käytetään oletuksena.",
   "settings.general.row.reasoningSummaries.title": "Näytä päättelyn yhteenvedot",
   "settings.general.row.reasoningSummaries.description": "Näytä mallin päättelyn yhteenvedot aikajanalla",
+  "settings.general.row.showToolCalls.title": "Näytä työkalukutsut",
+  "settings.general.row.showToolCalls.description": "Näytä työkalukutsut aikajanalla",
   "settings.general.row.shellToolPartsExpanded.title": "Laajenna shell-työkalun osat",
   "settings.general.row.shellToolPartsExpanded.description":
     "Näytä shell-työkalun osat oletuksena laajennettuina aikajanalla",

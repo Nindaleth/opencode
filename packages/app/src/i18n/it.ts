@@ -874,6 +874,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Mostra riassunti del ragionamento",
   "settings.general.row.reasoningSummaries.description":
     "Visualizza i riepiloghi del ragionamento del modello nella sequenza temporale",
+  "settings.general.row.showToolCalls.title": "Mostra chiamate agli strumenti",
+  "settings.general.row.showToolCalls.description": "Visualizza le chiamate agli strumenti nella sequenza temporale",
   "settings.general.row.shellToolPartsExpanded.title": "Espandi le parti dello strumento Shell",
   "settings.general.row.shellToolPartsExpanded.description":
     "Mostra le parti dello strumento Shell espanse per impostazione predefinita nella sequenza temporale",

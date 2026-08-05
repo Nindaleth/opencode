@@ -955,6 +955,8 @@ export const dict = {
     "کمپوزر چ ایجنٹاں دے وچکار سوئچ کرو۔ جدوں لُکیا ہوندا اے، تے بلڈ ایجنٹ تے ڈیفالٹ ہوندا اے۔",
   "settings.general.row.reasoningSummaries.title": "استدلال دے خلاصے وکھاؤ",
   "settings.general.row.reasoningSummaries.description": "ٹائم لائن وچ ماڈل دی استدلال دے خلاصے وکھاؤ",
+  "settings.general.row.showToolCalls.title": "ٹول کالاں وکھاؤ",
+  "settings.general.row.showToolCalls.description": "ٹائم لائن وچ ٹول کالاں وکھاؤ",
   "settings.general.row.shellToolPartsExpanded.title": "شیل ٹول دے حصیاں نو ودھاؤ",
   "settings.general.row.shellToolPartsExpanded.description":
     "ٹائم لائن وچ ڈیفالٹ دے طور تے ودھائے گئے شیل ٹول دے حصے وکھاؤ",
