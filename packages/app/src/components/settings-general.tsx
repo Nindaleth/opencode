@@ -360,12 +360,25 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.showToolCalls.title")}
+          description={language.t("settings.general.row.showToolCalls.description")}
+        >
+          <div data-action="settings-feed-show-tool-calls">
+            <Switch
+              checked={settings.general.showToolCalls()}
+              onChange={(checked) => settings.general.setShowToolCalls(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >
           <div data-action="settings-feed-shell-tool-parts-expanded">
             <Switch
               checked={settings.general.shellToolPartsExpanded()}
+              disabled={!settings.general.showToolCalls()}
               onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
             />
           </div>
@@ -378,6 +391,7 @@ export const SettingsGeneral: Component = () => {
           <div data-action="settings-feed-edit-tool-parts-expanded">
             <Switch
               checked={settings.general.editToolPartsExpanded()}
+              disabled={!settings.general.showToolCalls()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
             />
           </div>
