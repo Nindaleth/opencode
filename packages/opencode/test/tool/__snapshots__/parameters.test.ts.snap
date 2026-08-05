@@ -313,10 +313,6 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
       "description": "A short (3-5 words) description of the task",
       "type": "string",
     },
-    "model": {
-      "description": "Optional model override for the subagent in 'provider_id/model_id' format. Omit to use the default model for the subagent",
-      "type": "string",
-    },
     "prompt": {
       "description": "The task for the agent to perform",
       "type": "string",
@@ -327,10 +323,6 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
     },
     "task_id": {
       "description": "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
-      "type": "string",
-    },
-    "variant": {
-      "description": "Optional reasoning-effort variant of the subagent model (e.g. low, medium, high). Only variants supported by the selected model are accepted",
       "type": "string",
     },
   },
