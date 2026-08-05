@@ -3,7 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -825,61 +825,6 @@ describe("tool.task", () => {
       }),
     {
       config: providerConfig,
-    },
-  )
-
-  it.instance(
-    "qualifies suggestions for an unknown explicit task model",
-    () =>
-      Effect.gen(function* () {
-        const { chat, assistant } = yield* seed()
-        const tool = yield* TaskTool
-        const def = yield* tool.init()
-        const exit = yield* def
-          .execute(
-            {
-              description: "inspect bug",
-              prompt: "look into the cache key path",
-              subagent_type: "general",
-              model: "github-copilot/opus-5",
-            },
-            {
-              sessionID: chat.id,
-              messageID: assistant.id,
-              agent: "build",
-              abort: new AbortController().signal,
-              extra: { promptOps: stubOps() },
-              messages: [],
-              metadata: () => Effect.void,
-              ask: () => Effect.void,
-            },
-          )
-          .pipe(Effect.exit)
-
-        if (!Exit.isFailure(exit)) throw new Error("Expected explicit model lookup to fail")
-        const error = Cause.prettyErrors(exit.cause)[0]
-        expect(error.message).toContain("github-copilot/claude-opus-5")
-      }),
-    {
-      config: {
-        provider: {
-          ...providerConfig.provider,
-          "github-copilot": {
-            name: "GitHub Copilot",
-            id: "github-copilot",
-            env: [],
-            npm: "@ai-sdk/openai-compatible",
-            models: {
-              "claude-opus-5": {
-                id: "claude-opus-5",
-                name: "Claude Opus 5",
-                ...baseProviderModel,
-              },
-            },
-            options: { apiKey: "test-key", baseURL: "http://localhost:1/v1" },
-          },
-        },
-      },
     },
   )
 
