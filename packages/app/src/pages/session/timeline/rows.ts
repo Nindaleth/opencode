@@ -37,6 +37,7 @@ export namespace Timeline {
     getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
     getMessageParts: (messageID: string) => Part[],
     showReasoning: boolean,
+    showToolCalls: boolean,
     status: SessionStatus["type"],
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
@@ -89,6 +90,7 @@ export namespace Timeline {
           turn.assistants,
           index,
           showReasoning,
+          showToolCalls,
           status,
           turn.user.id === activeMessageID,
           inlineComments,
@@ -103,6 +105,7 @@ export namespace Timeline {
     assistantMessages: AssistantMessage[],
     index: number,
     showReasoning: boolean,
+    showToolCalls: boolean,
     status: SessionStatus["type"],
     isActive: boolean,
     // v2 renders comments inside the user message attachments row instead of a strip row
@@ -121,7 +124,7 @@ export namespace Timeline {
 
     const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
-        .filter((part) => renderable(part, showReasoning))
+        .filter((part) => renderable(part, showReasoning) && (showToolCalls || part.type !== "tool"))
         .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
     const assistantItems =
@@ -189,7 +192,12 @@ export namespace Timeline {
       assistantGroupIndex += 1
     })
 
-    if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
+    if (
+      isActive &&
+      status === "busy" &&
+      !error &&
+      (showReasoning && showToolCalls ? assistantPartRefs.length === 0 : true)
+    ) {
       const heading = assistantMessages
         .flatMap((message) => getMessageParts(message.id))
         .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
