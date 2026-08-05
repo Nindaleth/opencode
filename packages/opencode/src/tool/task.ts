@@ -53,14 +53,6 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
-  model: Schema.optional(Schema.String).annotate({
-    description:
-      "Optional model override for the subagent in 'provider_id/model_id' format. Omit to use the default model for the subagent",
-  }),
-  variant: Schema.optional(Schema.String).annotate({
-    description:
-      "Optional reasoning-effort variant of the subagent model (e.g. low, medium, high). Only variants supported by the selected model are accepted",
-  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -214,56 +206,25 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const explicitModel = params.model
-        ? yield* Effect.gen(function* () {
-            const [providerID, ...rest] = params.model!.split("/")
-            const modelID = rest.join("/")
-            if (!providerID || !modelID)
-              return yield* Effect.fail(
-                new Error(`Invalid model "${params.model}". Expected "provider_id/model_id" format`),
-              )
-            return yield* provider.getModel(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID))
-          })
+      const pluginModel = hook.model
+        ? yield* provider.getModel(ProviderV2.ID.make(hook.model.providerID), ModelV2.ID.make(hook.model.modelID))
         : undefined
-      const pluginModel =
-        !explicitModel && hook.model
-          ? yield* provider.getModel(ProviderV2.ID.make(hook.model.providerID), ModelV2.ID.make(hook.model.modelID))
-          : undefined
-      const model = explicitModel
+      const model = pluginModel
         ? {
-            providerID: explicitModel.providerID,
-            modelID: explicitModel.id,
+            providerID: pluginModel.providerID,
+            modelID: pluginModel.id,
           }
-        : pluginModel
-          ? {
-              providerID: pluginModel.providerID,
-              modelID: pluginModel.id,
-            }
-          : (next.model ?? {
-              modelID: msg.info.modelID,
-              providerID: msg.info.providerID,
-            })
-      if (params.variant) {
-        const full = explicitModel ?? (yield* provider.getModel(model.providerID, model.modelID))
-        if (!full.variants?.[params.variant]) {
-          const available = Object.keys(full.variants ?? {})
-          const hint = available.length ? ` Available variants: ${available.join(", ")}` : " The model has no variants"
-          return yield* Effect.fail(
-            new Error(`Variant "${params.variant}" is not available for ${model.providerID}/${model.modelID}.${hint}`),
-          )
-        }
-      }
-      const childVariant = params.variant
-        ? params.variant
-        : explicitModel
+        : (next.model ?? {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          })
+      const childVariant = pluginModel
+        ? hook.model?.variant && pluginModel.variants?.[hook.model.variant]
+          ? hook.model.variant
+          : undefined
+        : next.model
           ? undefined
-          : pluginModel
-            ? hook.model?.variant && pluginModel.variants?.[hook.model.variant]
-              ? hook.model.variant
-              : undefined
-            : next.model
-              ? undefined
-              : variant
+          : variant
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
