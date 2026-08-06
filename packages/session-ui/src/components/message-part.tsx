@@ -31,7 +31,7 @@ import {
   QuestionAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
-import { useData } from "../context"
+import { type ArtifactHrefFn, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
@@ -63,7 +63,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
-import { artifact, attached, inline, kind, typeLabel } from "./message-file"
+import { attached, downloadable, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
@@ -708,7 +708,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
-export function renderable(part: PartType, showReasoningSummaries = true) {
+export function renderable(part: PartType, showReasoningSummaries = true, artifactHref?: ArtifactHrefFn) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
@@ -716,9 +716,9 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
   }
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
-  // FilePartDisplay renders nothing for non-artifact files, so admitting them here
-  // would produce a blank timeline row
-  if (part.type === "file") return artifact(part)
+  // FilePartDisplay renders nothing for non-artifact files or when the host supplies no
+  // artifact href resolver, so admitting them here would produce a blank timeline row
+  if (part.type === "file") return downloadable(part, artifactHref)
   return !!PART_MAPPING[part.type]
 }
 
@@ -750,7 +750,7 @@ export function AssistantParts(props: {
       groupParts(
         props.messages.flatMap((message) =>
           list(data.store.part?.[message.id], emptyParts)
-            .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+            .filter((part) => renderable(part, props.showReasoningSummaries ?? true, data.artifactHref))
             .map((part) => ({
               messageID: message.id,
               part,
@@ -973,12 +973,13 @@ export function AssistantMessageDisplay(props: {
   useV2Actions?: boolean
 }) {
   const emptyTools: ToolPart[] = []
+  const data = useData()
   const part = createMemo(() => index(props.parts))
   const grouped = createMemo(
     () =>
       groupParts(
         props.parts
-          .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+          .filter((part) => renderable(part, props.showReasoningSummaries ?? true, data.artifactHref))
           .map((part) => ({
             messageID: props.message.id,
             part,
@@ -1658,22 +1659,29 @@ PART_MAPPING["file"] = function FilePartDisplay(props) {
   const i18n = useI18n()
   const data = useData()
   const part = () => props.part as FilePart
-  const href = createMemo(() => data.artifactHref?.(part().url) ?? part().url)
+  // no resolver means no fetchable href, and a chip whose click 404s is worse than no chip
+  const href = createMemo(() => {
+    const resolve = data.artifactHref
+    if (!downloadable(part(), resolve)) return
+    return resolve?.(part().url)
+  })
 
   return (
-    <Show when={artifact(part())}>
-      <div data-component="file-part">
-        <a data-slot="file-part-link" href={href()} download={part().filename ?? ""}>
-          <FileIcon data-slot="file-part-icon" node={{ path: part().filename ?? "", type: "file" }} />
-          <span data-slot="file-part-name" class="text-12-regular">
-            {part().filename ?? i18n.t("ui.messagePart.file.generated")}
-          </span>
-          <Icon data-slot="file-part-action" name="download" />
-          <span data-slot="file-part-action-label" class="text-12-regular text-text-weak">
-            {i18n.t("ui.messagePart.file.download")}
-          </span>
-        </a>
-      </div>
+    <Show when={href()}>
+      {(value) => (
+        <div data-component="file-part">
+          <a data-slot="file-part-link" href={value()} download={part().filename ?? ""}>
+            <FileIcon data-slot="file-part-icon" node={{ path: part().filename ?? "", type: "file" }} />
+            <span data-slot="file-part-name" class="text-12-regular">
+              {part().filename ?? i18n.t("ui.messagePart.file.generated")}
+            </span>
+            <Icon data-slot="file-part-action" name="download" />
+            <span data-slot="file-part-action-label" class="text-12-regular text-text-weak">
+              {i18n.t("ui.messagePart.file.download")}
+            </span>
+          </a>
+        </div>
+      )}
     </Show>
   )
 }

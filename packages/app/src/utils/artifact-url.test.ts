@@ -23,6 +23,10 @@ describe("artifactUrl", () => {
   })
 
   test("keeps a base url path prefix", () => {
-    expect(artifactUrl({ url: "http://remote:4096/proxy/" }, path)).toBe(`http://remote:4096${path}`)
+    expect(artifactUrl({ url: "http://remote:4096/proxy/" }, path)).toBe(`http://remote:4096/proxy${path}`)
+  })
+
+  test("keeps a base url path prefix without a trailing slash", () => {
+    expect(artifactUrl({ url: "http://remote:4096/proxy" }, path)).toBe(`http://remote:4096/proxy${path}`)
   })
 })
