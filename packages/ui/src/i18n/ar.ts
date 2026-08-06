@@ -99,6 +99,8 @@ export const dict = {
 
   "ui.messagePart.questions.dismissed": "تم إهمال الأسئلة",
   "ui.messagePart.compaction": "تم اختصار الجلسة",
+  "ui.messagePart.file.download": "تنزيل",
+  "ui.messagePart.file.generated": "ملف تم إنشاؤه",
   "ui.messagePart.context.read.one": "{{count}} قراءة",
   "ui.messagePart.context.read.zero": "{{count}} قراءة",
   "ui.messagePart.context.read.two": "عدد القراءات: {{count}}",

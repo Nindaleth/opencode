@@ -94,6 +94,8 @@ export const dict: Record<string, string> = {
   "ui.messagePart.review.title": "Xem lại các câu trả lời của bạn",
   "ui.messagePart.questions.dismissed": "Đã bỏ qua câu hỏi",
   "ui.messagePart.compaction": "Đã nén phiên",
+  "ui.messagePart.file.download": "Tải xuống",
+  "ui.messagePart.file.generated": "Tệp đã tạo",
   "ui.messagePart.context.read.one": "{{count}} đọc",
   "ui.messagePart.context.read.other": "{{count}} lượt đọc",
   "ui.messagePart.context.search.one": "{{count}} tìm kiếm",

@@ -97,6 +97,8 @@ export const dict = {
 
   "ui.messagePart.questions.dismissed": "問題已略過",
   "ui.messagePart.compaction": "工作階段已壓縮",
+  "ui.messagePart.file.download": "下載",
+  "ui.messagePart.file.generated": "產生的檔案",
   "ui.messagePart.context.read.one": "{{count}} 次讀取",
   "ui.messagePart.context.read.other": "{{count}} 次讀取",
   "ui.messagePart.context.search.one": "{{count}} 次搜尋",
