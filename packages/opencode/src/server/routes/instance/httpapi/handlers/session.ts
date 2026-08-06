@@ -162,9 +162,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const part = yield* session.getPart(ctx.params)
       if (!part || part.type !== "file") return yield* notFound("Artifact not found")
 
-      const bytes = yield* artifactStore
-        .read(ctx.params.sessionID, ctx.params.partID)
-        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const bytes = yield* artifactStore.read(ctx.params.sessionID, ctx.params.partID).pipe(
+        // The ID is attacker-controllable, so the client always sees 404, but a
+        // permissions problem or a corrupt data directory has to be visible in logs.
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to read MCP artifact", { cause }).pipe(Effect.as(undefined)),
+        ),
+      )
       if (!bytes) return yield* notFound("Artifact not found")
 
       return HttpServerResponse.uint8Array(bytes, {
