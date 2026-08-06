@@ -716,6 +716,9 @@ export function renderable(part: PartType, showReasoningSummaries = true) {
   }
   if (part.type === "text") return !!part.text?.trim()
   if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
+  // FilePartDisplay renders nothing for non-artifact files, so admitting them here
+  // would produce a blank timeline row
+  if (part.type === "file") return artifact(part)
   return !!PART_MAPPING[part.type]
 }
 
@@ -1653,12 +1656,14 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
 
 PART_MAPPING["file"] = function FilePartDisplay(props) {
   const i18n = useI18n()
+  const data = useData()
   const part = () => props.part as FilePart
+  const href = createMemo(() => data.artifactHref?.(part().url) ?? part().url)
 
   return (
     <Show when={artifact(part())}>
       <div data-component="file-part">
-        <a data-slot="file-part-link" href={part().url} download={part().filename ?? ""}>
+        <a data-slot="file-part-link" href={href()} download={part().filename ?? ""}>
           <FileIcon data-slot="file-part-icon" node={{ path: part().filename ?? "", type: "file" }} />
           <span data-slot="file-part-name" class="text-12-regular">
             {part().filename ?? i18n.t("ui.messagePart.file.generated")}
