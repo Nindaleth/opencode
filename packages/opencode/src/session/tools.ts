@@ -16,6 +16,7 @@ import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSch
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
+import { SessionArtifact } from "./artifact"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
@@ -53,6 +54,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const permission = yield* Permission.Service
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
+  const artifactStore = yield* SessionArtifact.Service
+  const session = yield* Session.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
 
@@ -426,45 +429,32 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             result,
           )
 
-          const textParts: string[] = []
-          const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") textParts.push(contentItem.text)
-            else if (contentItem.type === "image") {
-              attachments.push({
-                type: "file",
-                mime: contentItem.mimeType,
-                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-              })
-            } else if (contentItem.type === "resource") {
-              const { resource } = contentItem
-              if (resource.text) textParts.push(resource.text)
-              if (resource.blob) {
-                const mime = resource.mimeType ?? "application/octet-stream"
-                const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-                  )
-                  continue
-                }
-                if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
-                  )
-                  continue
-                }
-                attachments.push({
-                  type: "file",
-                  mime,
-                  url: `data:${mime};base64,${resource.blob}`,
-                  filename: resource.uri,
-                })
-              }
-            }
+          const classified = classifyMcpContent(result.content, { maxBytes: MAX_MCP_RESOURCE_BLOB_BYTES })
+
+          for (const artifact of classified.artifacts) {
+            const partID = PartID.ascending()
+            const stored = yield* artifactStore
+              .write(ctx.sessionID, partID, Buffer.from(artifact.base64, "base64"))
+              .pipe(
+                Effect.as(true),
+                // A download the user may never click must never fail their actual request.
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("failed to store MCP artifact", { cause }).pipe(Effect.as(false)),
+                ),
+              )
+            if (!stored) continue
+            yield* session.updatePart({
+              id: partID,
+              sessionID: ctx.sessionID,
+              messageID: input.processor.message.id,
+              type: "file",
+              mime: artifact.mime,
+              filename: artifact.filename,
+              url: `/session/${ctx.sessionID}/message/${input.processor.message.id}/part/${partID}/artifact`,
+            } satisfies SessionV1.FilePart)
           }
 
-          const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+          const truncated = yield* truncate.output(classified.text.join("\n\n"), {}, input.agent)
           const metadata = {
             ...result.metadata,
             truncated: truncated.truncated,
@@ -475,7 +465,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             title: "",
             metadata,
             output: truncated.content,
-            attachments: attachments.map((attachment) => ({
+            attachments: classified.attachments.map((attachment) => ({
               ...attachment,
               id: PartID.ascending(),
               sessionID: ctx.sessionID,
@@ -576,6 +566,102 @@ function formatMcpResourceContent(server: string, uri: string, content: { conten
     attachments,
     text: text.join("\n\n") || `MCP resource ${uri} from ${server} returned no contents.`,
   }
+}
+
+/** Extension hints for artifact filenames; anything unlisted falls back to `bin`. */
+const MIME_EXTENSIONS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/zip": "zip",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/json": "json",
+  "text/csv": "csv",
+  "image/gif": "gif",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+}
+
+export type McpContentItem =
+  | { type: "text"; text: string }
+  | { type: "image"; mimeType: string; data: string }
+  | { type: "resource"; resource: { uri: string; mimeType?: string; text?: string; blob?: string } }
+  | { type: string; [key: string]: unknown }
+
+/**
+ * Splits MCP tool content into the model-visible channel and the download-only
+ * channel. `attachments` becomes `ToolPart.state.attachments`, which is replayed
+ * into every subsequent model message, so it stays restricted to the existing
+ * whitelist. `artifacts` becomes assistant-side file parts, which `toModelMessage`
+ * never forwards.
+ */
+export function classifyMcpContent(content: readonly McpContentItem[], limits: { maxBytes: number }) {
+  const text: string[] = []
+  const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
+  const artifacts: Array<{ mime: string; filename: string; base64: string }> = []
+
+  for (const item of content) {
+    if (item.type === "text" && typeof item.text === "string") {
+      text.push(item.text)
+      continue
+    }
+
+    if (item.type === "image" && typeof item.data === "string" && typeof item.mimeType === "string") {
+      if (base64Size(item.data) <= limits.maxBytes) {
+        attachments.push({ type: "file", mime: item.mimeType, url: dataUrl(item.mimeType, item.data) })
+        artifacts.push({
+          mime: item.mimeType,
+          filename: artifactFilename(undefined, item.mimeType, artifacts.length),
+          base64: item.data,
+        })
+      }
+      continue
+    }
+
+    if (item.type !== "resource" || !isRecord(item.resource)) continue
+    const resource = item.resource as { uri: string; mimeType?: string; text?: string; blob?: string }
+    if (resource.text) text.push(resource.text)
+    if (!resource.blob) continue
+
+    const mime = resource.mimeType ?? "application/octet-stream"
+    const size = base64Size(resource.blob)
+    if (size > limits.maxBytes) {
+      text.push(
+        `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(limits.maxBytes)}]`,
+      )
+      continue
+    }
+
+    const filename = artifactFilename(resource.uri, mime, artifacts.length)
+    artifacts.push({ mime, filename, base64: resource.blob })
+
+    if (SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+      attachments.push({ type: "file", mime, url: dataUrl(mime, resource.blob), filename: resource.uri })
+      continue
+    }
+
+    text.push(`[Generated ${filename} (${mime}, ${formatBytes(size)}) - offered to the user as a download]`)
+  }
+
+  return { text, attachments, artifacts }
+}
+
+function dataUrl(mime: string, base64: string) {
+  return `data:${mime};base64,${base64}`
+}
+
+function artifactFilename(uri: string | undefined, mime: string, index: number) {
+  const candidate = uri ? sanitizeFilename(uri.split("/").pop() ?? "") : ""
+  if (candidate) return candidate
+  return `artifact-${index + 1}.${MIME_EXTENSIONS[mime] ?? "bin"}`
+}
+
+function sanitizeFilename(value: string) {
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f"\\/]/g, "")
+    .replace(/\.\.+/g, ".")
+    .trim()
+  return cleaned === "." ? "" : cleaned
 }
 
 function base64Size(value: string) {
