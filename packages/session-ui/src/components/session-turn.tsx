@@ -15,6 +15,7 @@ import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } fr
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
+import { artifact } from "./message-file"
 import { Card } from "@opencode-ai/ui/card"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -110,6 +111,7 @@ function partState(part: PartType, showReasoningSummaries: boolean) {
     if (showReasoningSummaries && part.text?.trim()) return "visible" as const
     return
   }
+  if (part.type === "file") return artifact(part) ? ("visible" as const) : undefined
   if (PART_MAPPING[part.type]) return "visible" as const
   return
 }

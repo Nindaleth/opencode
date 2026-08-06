@@ -42,6 +42,10 @@ export type NavigateToSessionFn = (sessionID: string) => void
 
 export type SessionHrefFn = (sessionID: string) => string
 
+// server-relative artifact urls need the host's base url and credentials to be
+// fetchable by a plain anchor, which session-ui has no access to on its own
+export type ArtifactHrefFn = (url: string) => string
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -50,6 +54,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     sessionID?: string
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    onArtifactHref?: ArtifactHrefFn
   }) => {
     return {
       get store() {
@@ -63,6 +68,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      artifactHref: props.onArtifactHref,
     }
   },
 })

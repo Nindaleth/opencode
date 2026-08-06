@@ -54,6 +54,15 @@ describe("message-file", () => {
     expect(artifact(file({ url: "https://example.com/session/a/artifact" }))).toBe(false)
   })
 
+  // renderable() in message-part and partState() in session-turn both delegate the
+  // file-part visibility decision to artifact(), so this is the contract they enforce:
+  // only artifact urls become timeline rows, never data:/file:// user attachments
+  test("gates file part visibility on the artifact url shape", () => {
+    expect(artifact(file({ url: "/session/ses_1/message/msg_1/part/prt_1/artifact" }))).toBe(true)
+    expect(artifact(file({ url: "data:text/plain;base64,SGVsbG8=" }))).toBe(false)
+    expect(artifact(file({ url: "file:///repo/README.txt" }))).toBe(false)
+  })
+
   test("separates image and file attachment kinds", () => {
     expect(kind(file({ mime: "image/png" }))).toBe("image")
     expect(kind(file({ mime: "application/pdf" }))).toBe("file")
