@@ -187,4 +187,58 @@ describe("SessionTools.classifyMcpContent", () => {
     expect(result.text).toHaveLength(1)
     expect(result.text[0]).toContain("exceeds")
   })
+
+  test("a resource mime containing crlf falls back to application/octet-stream", () => {
+    const result = SessionTools.classifyMcpContent(
+      [
+        {
+          type: "resource",
+          resource: {
+            uri: "mcp://tool/thing.bin",
+            mimeType: "application/pdf\r\nx-injected: 1",
+            blob: base64("blob"),
+          },
+        },
+      ],
+      limits,
+    )
+
+    expect(result.artifacts[0].mime).toBe("application/octet-stream")
+    expect(result.attachments).toEqual([])
+  })
+
+  test("a junk resource mime falls back to application/octet-stream", () => {
+    const result = SessionTools.classifyMcpContent(
+      [
+        {
+          type: "resource",
+          resource: { uri: "mcp://tool/thing.bin", mimeType: "not a mime type at all", blob: base64("blob") },
+        },
+      ],
+      limits,
+    )
+
+    expect(result.artifacts[0].mime).toBe("application/octet-stream")
+  })
+
+  test("an image mime containing crlf falls back to application/octet-stream", () => {
+    const result = SessionTools.classifyMcpContent(
+      [{ type: "image", mimeType: "image/png\r\nx-injected: 1", data: base64("png") }],
+      limits,
+    )
+
+    expect(result.artifacts[0].mime).toBe("application/octet-stream")
+    expect(result.attachments[0].mime).toBe("application/octet-stream")
+    expect(result.attachments[0].url).not.toContain("\r")
+  })
+
+  test("a junk image mime falls back to application/octet-stream", () => {
+    const result = SessionTools.classifyMcpContent(
+      [{ type: "image", mimeType: "image/png; charset=<script>", data: base64("png") }],
+      limits,
+    )
+
+    expect(result.artifacts[0].mime).toBe("application/octet-stream")
+    expect(result.attachments[0].mime).toBe("application/octet-stream")
+  })
 })

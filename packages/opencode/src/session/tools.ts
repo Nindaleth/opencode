@@ -612,17 +612,16 @@ export function classifyMcpContent(content: readonly McpContentItem[], limits: {
     }
 
     if (item.type === "image" && typeof item.data === "string" && typeof item.mimeType === "string") {
+      const mime = sanitizeMime(item.mimeType)
       const size = base64Size(item.data)
       if (size > limits.maxBytes) {
-        text.push(
-          `[Binary MCP image omitted: (${item.mimeType}, ${formatBytes(size)}) exceeds ${formatBytes(limits.maxBytes)}]`,
-        )
+        text.push(`[Binary MCP image omitted: (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(limits.maxBytes)}]`)
         continue
       }
-      attachments.push({ type: "file", mime: item.mimeType, url: dataUrl(item.mimeType, item.data) })
+      attachments.push({ type: "file", mime, url: dataUrl(mime, item.data) })
       artifacts.push({
-        mime: item.mimeType,
-        filename: artifactFilename(undefined, undefined, item.mimeType, artifacts.length),
+        mime,
+        filename: artifactFilename(undefined, undefined, mime, artifacts.length),
         base64: item.data,
       })
       continue
@@ -633,7 +632,7 @@ export function classifyMcpContent(content: readonly McpContentItem[], limits: {
     if (resource.text) text.push(resource.text)
     if (!resource.blob) continue
 
-    const mime = resource.mimeType ?? "application/octet-stream"
+    const mime = sanitizeMime(resource.mimeType ?? "application/octet-stream")
     const size = base64Size(resource.blob)
     if (size > limits.maxBytes) {
       text.push(
@@ -658,6 +657,15 @@ export function classifyMcpContent(content: readonly McpContentItem[], limits: {
 
 function dataUrl(mime: string, base64: string) {
   return `data:${mime};base64,${base64}`
+}
+
+/**
+ * MCP servers control this string and it reaches both a `content-type` response
+ * header and a `data:` URL. Anything that is not a bare `type/subtype` token pair
+ * (notably CR/LF, which would make the HTTP layer reject the header) is dropped.
+ */
+function sanitizeMime(value: string) {
+  return /^[\w.+-]+\/[\w.+-]+$/.test(value) ? value : "application/octet-stream"
 }
 
 function artifactFilename(name: string | undefined, uri: string | undefined, mime: string, index: number) {
