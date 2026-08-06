@@ -6,6 +6,7 @@ import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
+import { SessionArtifact } from "@/session/artifact"
 import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -36,7 +37,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-import { PermissionNotFoundError } from "../errors"
+import { notFound, PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -59,6 +60,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
+    const artifactStore = yield* SessionArtifact.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -150,6 +152,27 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* SessionError.mapStorageNotFound(
         MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
       )
+    })
+
+    const artifact = Effect.fn("SessionHttpApi.artifact")(function* (ctx: {
+      params: { sessionID: SessionID; messageID: MessageID; partID: PartID }
+    }) {
+      // The part row is the authorization record. The filesystem is not consulted
+      // until it proves this part exists, is a file, and belongs to this session.
+      const part = yield* session.getPart(ctx.params)
+      if (!part || part.type !== "file") return yield* notFound("Artifact not found")
+
+      const bytes = yield* artifactStore
+        .read(ctx.params.sessionID, ctx.params.partID)
+        .pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!bytes) return yield* notFound("Artifact not found")
+
+      return HttpServerResponse.uint8Array(bytes, {
+        contentType: part.mime,
+        headers: {
+          "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(part.filename ?? "artifact")}`,
+        },
+      })
     })
 
     const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
@@ -419,6 +442,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)
+      .handle("artifact", artifact)
       .handleRaw("create", createRaw)
       .handle("remove", remove)
       .handle("update", update)

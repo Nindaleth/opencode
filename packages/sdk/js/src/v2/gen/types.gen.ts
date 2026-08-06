@@ -9920,6 +9920,42 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
+export type SessionArtifactData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+    partID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}/artifact"
+}
+
+export type SessionArtifactErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionArtifactError = SessionArtifactErrors[keyof SessionArtifactErrors]
+
+export type SessionArtifactResponses = {
+  /**
+   * Artifact bytes
+   */
+  200: Blob | File
+}
+
+export type SessionArtifactResponse = SessionArtifactResponses[keyof SessionArtifactResponses]
+
 export type SessionForkData = {
   body?: {
     messageID?: string

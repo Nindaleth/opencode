@@ -24,6 +24,7 @@ import * as HttpSessionError from "../../src/server/routes/instance/httpapi/hand
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
+import { SessionArtifact } from "@/session/artifact"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -44,7 +45,15 @@ const noopBootstrapLayer = Layer.succeed(
   InstanceBootstrapService.Service.of({ run: Effect.void }),
 )
 const appLayer = AppNodeBuilder.build(
-  LayerNode.group([InstanceStore.node, Project.node, Session.node, Workspace.node, Database.node, Ripgrep.node]),
+  LayerNode.group([
+    InstanceStore.node,
+    Project.node,
+    Session.node,
+    SessionArtifact.node,
+    Workspace.node,
+    Database.node,
+    Ripgrep.node,
+  ]),
   [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
@@ -312,6 +321,81 @@ describe("session HttpApi", () => {
           name: "NotFoundError",
           data: { message: `Message not found: ${missingMessage}` },
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "serves stored artifact bytes and hides unknown parts",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const artifacts = yield* SessionArtifact.Service
+        const svc = yield* Session.Service
+        const session = yield* createSession({ title: "artifacts" })
+        const message = yield* createTextMessage(session.id, "hello")
+
+        const missing = yield* request(
+          pathFor(SessionPaths.artifact, {
+            sessionID: session.id,
+            messageID: message.info.id,
+            partID: PartID.ascending(),
+          }),
+          { headers },
+        )
+        expect(missing.status).toBe(404)
+
+        const textPart = yield* request(
+          pathFor(SessionPaths.artifact, {
+            sessionID: session.id,
+            messageID: message.info.id,
+            partID: message.part.id,
+          }),
+          { headers },
+        )
+        expect(textPart.status).toBe(404)
+
+        const partID = PartID.ascending()
+        yield* svc.updatePart({
+          id: partID,
+          sessionID: session.id,
+          messageID: message.info.id,
+          type: "file",
+          mime: "application/zip",
+          filename: "r\u00e9sum\u00e9 v2.zip",
+          url: `/session/${session.id}/message/${message.info.id}/part/${partID}/artifact`,
+        })
+
+        const artifactPath = pathFor(SessionPaths.artifact, {
+          sessionID: session.id,
+          messageID: message.info.id,
+          partID,
+        })
+
+        // The part row exists but the blob does not: still 404, never a 500.
+        expect((yield* request(artifactPath, { headers })).status).toBe(404)
+
+        yield* artifacts.write(session.id, partID, new Uint8Array([1, 2, 3, 4]))
+        const served = yield* request(artifactPath, { headers })
+        expect(served.status).toBe(200)
+        expect(served.headers["content-type"]).toBe("application/zip")
+        expect(served.headers["content-disposition"]).toBe(
+          "attachment; filename*=UTF-8''r%C3%A9sum%C3%A9%20v2.zip",
+        )
+        expect(new Uint8Array(yield* served.arrayBuffer)).toEqual(new Uint8Array([1, 2, 3, 4]))
+
+        // A part belonging to another session must not be reachable through this one.
+        const other = yield* createSession({ title: "other" })
+        const crossSession = yield* request(
+          pathFor(SessionPaths.artifact, {
+            sessionID: other.id,
+            messageID: message.info.id,
+            partID,
+          }),
+          { headers },
+        )
+        expect(crossSession.status).toBe(404)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
