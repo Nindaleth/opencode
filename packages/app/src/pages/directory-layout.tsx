@@ -12,6 +12,8 @@ import { Schema } from "effect"
 import type { ServerConnection } from "@/context/server"
 import { sessionHref } from "@/utils/session-route"
 import { useServerSync } from "@/context/server-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { artifactUrl } from "@/utils/artifact-url"
 
 export function DirectoryDataProvider(
   props: ParentProps<{
@@ -25,6 +27,7 @@ export function DirectoryDataProvider(
   const params = useParams()
   const sync = useSync()
   const serverSync = useServerSync()
+  const serverSDK = useServerSDK()
   const directory = () => (typeof props.directory === "function" ? props.directory() : props.directory)
   const slug = createMemo(() => base64Encode(directory()))
   const href = (sessionID: string) => {
@@ -66,6 +69,7 @@ export function DirectoryDataProvider(
           sessionID={params.id}
           onNavigateToSession={(sessionID: string) => navigate(href(sessionID))}
           onSessionHref={href}
+          onArtifactHref={(url: string) => artifactUrl(serverSDK().server.http, url)}
         >
           <LocalProvider>{props.children}</LocalProvider>
         </DataProvider>
