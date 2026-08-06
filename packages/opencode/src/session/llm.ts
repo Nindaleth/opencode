@@ -275,6 +275,9 @@ const live: Layer.Layer<
       })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
+      // No `stopWhen`: each provider turn must stay a single AI SDK step so history
+      // is re-derived through toModelMessages. Multi-step would serialize the raw MCP
+      // tool output, including base64 artifact content, into the next step's prompt.
       return {
         type: "ai-sdk" as const,
         result: streamText({
