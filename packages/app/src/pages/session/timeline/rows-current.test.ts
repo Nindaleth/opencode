@@ -14,6 +14,16 @@ mock.module("@opencode-ai/session-ui/message-part", () => ({
 
 const { Timeline, TimelineRow } = await import("./rows")
 
+const OPTIONS_IDLE = {
+  showReasoning: true,
+  showToolCalls: true,
+  showFileDownloads: true,
+  status: "idle",
+  inlineComments: true,
+  artifactHref: undefined,
+} as const
+const OPTIONS_BUSY = { ...OPTIONS_IDLE, status: "busy" } as const
+
 describe("current session timeline rows", () => {
   test("derives turns and tagged rows from chronological current messages", () => {
     const source = [
@@ -43,11 +53,8 @@ describe("current session timeline rows", () => {
       source,
       (messageID) => messages.get(messageID),
       (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      true,
-      "busy",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
+      OPTIONS_BUSY,
     )
 
     expect(result.activeMessageID).toBe("msg_3")
@@ -80,11 +87,8 @@ describe("current session timeline rows", () => {
       source,
       (messageID) => messages.get(messageID),
       (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      true,
-      "idle",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
+      OPTIONS_IDLE,
     )
 
     expect(result.activeMessageID).toBe("msg_shell")
@@ -122,11 +126,8 @@ describe("current session timeline rows", () => {
       source.slice(1),
       (messageID) => messages.get(messageID),
       (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      true,
-      "idle",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
+      OPTIONS_IDLE,
     )
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
@@ -156,11 +157,8 @@ describe("current session timeline rows", () => {
       (messageID) =>
         messageID === optimistic.id ? optimistic : normalized.messages.find((message) => message.id === messageID),
       () => [],
-      true,
-      true,
-      "busy",
-      true,
       [...normalized.messages.filter((message) => message.role === "user"), optimistic],
+      OPTIONS_BUSY,
     )
 
     expect(result.activeMessageID).toBe(optimistic.id)
@@ -200,13 +198,57 @@ describe("current session timeline rows", () => {
       source,
       (messageID) => messages.get(messageID),
       (messageID) => normalized.parts.get(messageID) ?? [],
-      true,
-      true,
-      "busy",
-      true,
       normalized.messages.filter((message) => message.role === "user"),
+      OPTIONS_BUSY,
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+  })
+
+  test("drops file parts when file downloads are disabled", () => {
+    const source = [
+      { id: "msg_1", type: "user", text: "make me a zip", time: { created: 1 } },
+      {
+        id: "msg_2",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "here you go" }],
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+    const userMessages = normalized.messages.filter((message) => message.role === "user")
+
+    const parts = (messageID: string) => {
+      if (messageID !== "msg_2") return normalized.parts.get(messageID) ?? []
+      return [
+        { id: "prt_text", sessionID: "ses_1", messageID: "msg_2", type: "text", text: "here you go" },
+        {
+          id: "prt_file",
+          sessionID: "ses_1",
+          messageID: "msg_2",
+          type: "file",
+          mime: "application/zip",
+          filename: "bundle.zip",
+          url: "/session/ses_1/message/msg_2/part/prt_file/artifact",
+        },
+      ] as never
+    }
+
+    const rowsFor = (showFileDownloads: boolean) =>
+      Timeline.constructSessionMessageRows(source, (messageID) => messages.get(messageID), parts, userMessages, {
+        showReasoning: true,
+        showToolCalls: false,
+        showFileDownloads,
+        status: "idle",
+        inlineComments: true,
+        artifactHref: (url) => url,
+      }).rows.map(TimelineRow.key)
+
+    expect(rowsFor(true).some((key) => key.includes("prt_file"))).toBe(true)
+    expect(rowsFor(false).some((key) => key.includes("prt_file"))).toBe(false)
+    expect(rowsFor(false).some((key) => key.includes("prt_text"))).toBe(true)
   })
 })

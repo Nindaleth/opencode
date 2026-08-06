@@ -15,6 +15,7 @@ export function createTimelineProjection(input: {
   status: Accessor<SessionStatus>
   showReasoningSummaries: Accessor<boolean>
   showToolCalls: Accessor<boolean>
+  showFileDownloads: Accessor<boolean>
   inlineComments: Accessor<boolean>
 }) {
   const data = useData()
@@ -37,12 +38,15 @@ export function createTimelineProjection(input: {
       input.sessionMessages(),
       (messageID) => messageByID().get(messageID) as UserMessage | AssistantMessage | undefined,
       input.parts,
-      input.showReasoningSummaries(),
-      input.showToolCalls(),
-      input.status().type,
-      input.inlineComments(),
       input.userMessages(),
-      data.artifactHref,
+      {
+        showReasoning: input.showReasoningSummaries(),
+        showToolCalls: input.showToolCalls(),
+        showFileDownloads: input.showFileDownloads(),
+        status: input.status().type,
+        inlineComments: input.inlineComments(),
+        artifactHref: data.artifactHref,
+      },
     ),
   )
   const activeMessageID = createMemo(() => projection().activeMessageID)
