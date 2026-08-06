@@ -6,7 +6,7 @@ import {
 } from "@opencode-ai/sdk/v2/client"
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
-import { useData } from "../context"
+import { type ArtifactHrefFn, useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -15,7 +15,7 @@ import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } fr
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
-import { artifact } from "./message-file"
+import { downloadable } from "./message-file"
 import { Card } from "@opencode-ai/ui/card"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
@@ -100,7 +100,7 @@ function summaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
 
 const hidden = new Set(["todowrite"])
 
-function partState(part: PartType, showReasoningSummaries: boolean) {
+function partState(part: PartType, showReasoningSummaries: boolean, artifactHref?: ArtifactHrefFn) {
   if (part.type === "tool") {
     if (hidden.has(part.tool)) return
     if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
@@ -111,7 +111,7 @@ function partState(part: PartType, showReasoningSummaries: boolean) {
     if (showReasoningSummaries && part.text?.trim()) return "visible" as const
     return
   }
-  if (part.type === "file") return artifact(part) ? ("visible" as const) : undefined
+  if (part.type === "file") return downloadable(part, artifactHref) ? ("visible" as const) : undefined
   if (PART_MAPPING[part.type]) return "visible" as const
   return
 }
@@ -358,7 +358,7 @@ export function SessionTurn(
     const show = showReasoningSummaries()
     for (const message of assistantMessages()) {
       for (const part of list(data.store.part?.[message.id], emptyParts)) {
-        if (partState(part, show) === "visible") {
+        if (partState(part, show, data.artifactHref) === "visible") {
           visible++
         }
         if (part.type === "reasoning" && part.text) {
