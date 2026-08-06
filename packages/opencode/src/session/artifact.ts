@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
-import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { PartID, SessionID } from "./schema"
 
@@ -81,14 +81,6 @@ const layer = Layer.effect(
 )
 
 export const node = LayerNode.make({ service: Service, layer: layer, deps: [FSUtil.node, Global.node] })
-
-/** Reclaims blob directories orphaned by crashes, manual database edits, or restores. */
-export const cleanupLayer = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const store = yield* Service
-    yield* store.sweep(new Set<string>()).pipe(Effect.repeat(Schedule.spaced(Duration.hours(6))), Effect.forkScoped)
-  }),
-)
 
 /**
  * Rejects any segment that is not a plain path component. Branded ID constructors
