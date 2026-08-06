@@ -54,11 +54,15 @@ const summary = (showToolCalls: boolean, status: "busy" | "idle") => {
     source,
     (messageID) => messages.get(messageID),
     (messageID) => normalized.parts.get(messageID) ?? [],
-    true,
-    showToolCalls,
-    status,
-    true,
     normalized.messages.filter((message) => message.role === "user"),
+    {
+      showReasoning: true,
+      showToolCalls,
+      showFileDownloads: true,
+      status,
+      inlineComments: true,
+      artifactHref: undefined,
+    },
   ).rows
   const keys = rows.map(TimelineRow.key)
   return {
