@@ -16,6 +16,12 @@ export function artifact(part: FilePart) {
   return part.url.startsWith("/session/") && part.url.endsWith("/artifact")
 }
 
+// a host that cannot resolve an artifact url to a fetchable href would render a chip whose
+// click 404s, so both the visibility predicates and the renderer gate on the resolver too
+export function downloadable(part: FilePart, artifactHref: ((url: string) => string) | undefined) {
+  return artifact(part) && !!artifactHref
+}
+
 export function kind(part: FilePart) {
   return part.mime.startsWith("image/") ? "image" : "file"
 }

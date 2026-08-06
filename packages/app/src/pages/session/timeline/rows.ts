@@ -2,6 +2,7 @@ import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/message-part"
+import type { ArtifactHrefFn } from "@opencode-ai/session-ui/context"
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 import { compareMessages } from "@/utils/session-message"
@@ -42,6 +43,7 @@ export namespace Timeline {
     status: SessionStatus["type"],
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
+    artifactHref?: ArtifactHrefFn,
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
@@ -95,6 +97,7 @@ export namespace Timeline {
           status,
           turn.user.id === activeMessageID,
           inlineComments,
+          artifactHref,
         ),
       ),
     }
@@ -111,6 +114,7 @@ export namespace Timeline {
     isActive: boolean,
     // v2 renders comments inside the user message attachments row instead of a strip row
     inlineComments: boolean,
+    artifactHref?: ArtifactHrefFn,
   ) {
     const rows: TimelineRow.TimelineRow[] = []
 
@@ -125,7 +129,7 @@ export namespace Timeline {
 
     const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
-        .filter((part) => renderable(part, showReasoning) && (showToolCalls || part.type !== "tool"))
+        .filter((part) => renderable(part, showReasoning, artifactHref) && (showToolCalls || part.type !== "tool"))
         .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
     const assistantItems =
