@@ -10,6 +10,12 @@ export function inline(part: FilePart) {
   return part.source?.text?.start !== undefined && part.source?.text?.end !== undefined
 }
 
+// artifacts are assistant-side files the server streams from the download endpoint;
+// user attachments carry data: or file:// urls and are rendered by UserMessageDisplay
+export function artifact(part: FilePart) {
+  return part.url.startsWith("/session/") && part.url.endsWith("/artifact")
+}
+
 export function kind(part: FilePart) {
   return part.mime.startsWith("image/") ? "image" : "file"
 }

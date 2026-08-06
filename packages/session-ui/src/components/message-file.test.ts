@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { FilePart } from "@opencode-ai/sdk/v2"
-import { attached, inline, kind, typeLabel } from "./message-file"
+import { artifact, attached, inline, kind, typeLabel } from "./message-file"
 
 function file(part: Partial<FilePart> = {}): FilePart {
   return {
@@ -44,6 +44,14 @@ describe("message-file", () => {
     })
     expect(inline(mentioned)).toBe(true)
     expect(attached(mentioned)).toBe(false)
+  })
+
+  test("recognizes only server artifact urls as downloadable artifacts", () => {
+    expect(artifact(file({ url: "/session/ses_1/message/msg_1/part/prt_1/artifact" }))).toBe(true)
+    expect(artifact(file({ url: "data:text/plain;base64,SGVsbG8=" }))).toBe(false)
+    expect(artifact(file())).toBe(false)
+    expect(artifact(file({ url: "/session/ses_1/message/msg_1/part/prt_1" }))).toBe(false)
+    expect(artifact(file({ url: "https://example.com/session/a/artifact" }))).toBe(false)
   })
 
   test("separates image and file attachment kinds", () => {

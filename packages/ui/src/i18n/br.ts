@@ -96,6 +96,8 @@ export const dict = {
 
   "ui.messagePart.questions.dismissed": "Perguntas descartadas",
   "ui.messagePart.compaction": "Sessão compactada",
+  "ui.messagePart.file.download": "Baixar",
+  "ui.messagePart.file.generated": "Arquivo gerado",
   "ui.messagePart.context.read.one": "{{count}} leitura",
   "ui.messagePart.context.read.many": "{{count}} de leituras",
   "ui.messagePart.context.read.other": "{{count}} leituras",

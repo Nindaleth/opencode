@@ -63,7 +63,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
 import { partDefaultOpen } from "./part-default-open"
 import { animate } from "motion"
-import { attached, inline, kind, typeLabel } from "./message-file"
+import { artifact, attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 
@@ -1649,6 +1649,28 @@ export function MessageDivider(props: { label: string }) {
 PART_MAPPING["compaction"] = function CompactionPartDisplay() {
   const i18n = useI18n()
   return <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
+}
+
+PART_MAPPING["file"] = function FilePartDisplay(props) {
+  const i18n = useI18n()
+  const part = () => props.part as FilePart
+
+  return (
+    <Show when={artifact(part())}>
+      <div data-component="file-part">
+        <a data-slot="file-part-link" href={part().url} download={part().filename ?? ""}>
+          <FileIcon data-slot="file-part-icon" node={{ path: part().filename ?? "", type: "file" }} />
+          <span data-slot="file-part-name" class="text-12-regular">
+            {part().filename ?? i18n.t("ui.messagePart.file.generated")}
+          </span>
+          <Icon data-slot="file-part-action" name="download" />
+          <span data-slot="file-part-action-label" class="text-12-regular text-text-weak">
+            {i18n.t("ui.messagePart.file.download")}
+          </span>
+        </a>
+      </div>
+    </Show>
+  )
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {

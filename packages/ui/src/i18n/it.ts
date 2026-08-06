@@ -96,6 +96,8 @@ export const dict: Record<string, string> = {
   "ui.messagePart.review.title": "Rivedi le tue risposte",
   "ui.messagePart.questions.dismissed": "Domande ignorate",
   "ui.messagePart.compaction": "Sessione compattata",
+  "ui.messagePart.file.download": "Scarica",
+  "ui.messagePart.file.generated": "File generato",
   "ui.messagePart.context.read.one": "{{count}} lettura",
   "ui.messagePart.context.read.many": "{{count}} di letture",
   "ui.messagePart.context.read.other": "{{count}} letture",
