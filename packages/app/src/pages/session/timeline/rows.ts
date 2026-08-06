@@ -32,17 +32,24 @@ export type TimelineRowMap = {
   Error: { userMessageID: string; text: string }
 }
 
+export type TimelineRowOptions = {
+  showReasoning: boolean
+  showToolCalls: boolean
+  // desktop cannot resolve artifact downloads, so the host decides whether file parts render
+  showFileDownloads: boolean
+  status: SessionStatus["type"]
+  // v2 renders comments inside the user message attachments row instead of a strip row
+  inlineComments: boolean
+  artifactHref: ArtifactHrefFn | undefined
+}
+
 export namespace Timeline {
   export function constructSessionMessageRows(
     messages: SessionMessageInfo[],
     getMessage: (messageID: string) => UserMessage | AssistantMessage | undefined,
     getMessageParts: (messageID: string) => Part[],
-    showReasoning: boolean,
-    showToolCalls: boolean,
-    status: SessionStatus["type"],
-    inlineComments: boolean,
     projectedUserMessages: UserMessage[],
-    artifactHref?: ArtifactHrefFn,
+    options: TimelineRowOptions,
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
@@ -86,18 +93,10 @@ export namespace Timeline {
     return {
       activeMessageID,
       rows: turns.flatMap((turn, index) =>
-        constructMessageRows(
-          turn.user,
-          getMessageParts,
-          turn.assistants,
-          index,
-          showReasoning,
-          showToolCalls,
-          status,
-          turn.user.id === activeMessageID,
-          inlineComments,
-          artifactHref,
-        ),
+        constructMessageRows(turn.user, getMessageParts, turn.assistants, index, {
+          ...options,
+          isActive: turn.user.id === activeMessageID,
+        }),
       ),
     }
   }
@@ -107,13 +106,7 @@ export namespace Timeline {
     getMessageParts: (messageID: string) => Part[],
     assistantMessages: AssistantMessage[],
     index: number,
-    showReasoning: boolean,
-    showToolCalls: boolean,
-    status: SessionStatus["type"],
-    isActive: boolean,
-    // v2 renders comments inside the user message attachments row instead of a strip row
-    inlineComments: boolean,
-    artifactHref?: ArtifactHrefFn,
+    options: TimelineRowOptions & { isActive: boolean },
   ) {
     const rows: TimelineRow.TimelineRow[] = []
 
@@ -128,7 +121,12 @@ export namespace Timeline {
 
     const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
-        .filter((part) => renderable(part, showReasoning, artifactHref) && (showToolCalls || part.type !== "tool"))
+        .filter(
+          (part) =>
+            renderable(part, options.showReasoning, options.artifactHref) &&
+            (options.showToolCalls || part.type !== "tool") &&
+            (options.showFileDownloads || part.type !== "file"),
+        )
         .map((part) => ({ messageID: message.id, messageIndex, part })),
     )
     const assistantItems =
@@ -151,7 +149,7 @@ export namespace Timeline {
         : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
 
-    if (comments.length > 0 && !inlineComments)
+    if (comments.length > 0 && !options.inlineComments)
       rows.push(
         new TimelineRow.CommentStrip({
           userMessageID: userMessage.id,
@@ -161,7 +159,7 @@ export namespace Timeline {
     rows.push(
       new TimelineRow.UserMessage({
         userMessageID: userMessage.id,
-        anchor: inlineComments || comments.length === 0,
+        anchor: options.inlineComments || comments.length === 0,
       }),
     )
 
@@ -197,10 +195,10 @@ export namespace Timeline {
     })
 
     if (
-      isActive &&
-      status === "busy" &&
+      options.isActive &&
+      options.status === "busy" &&
       !error &&
-      (showReasoning && showToolCalls ? assistantPartRefs.length === 0 : true)
+      (options.showReasoning && options.showToolCalls ? assistantPartRefs.length === 0 : true)
     ) {
       const heading = assistantMessages
         .flatMap((message) => getMessageParts(message.id))
@@ -215,10 +213,11 @@ export namespace Timeline {
       )
     }
 
-    if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
+    if (options.isActive && options.status === "retry")
+      rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
     const diffs = uniqueSummaryDiffs(userMessage.summary?.diffs)
-    if (diffs.length > 0 && (status === "idle" || !isActive)) {
+    if (diffs.length > 0 && (options.status === "idle" || !options.isActive)) {
       rows.push(
         new TimelineRow.DiffSummary({
           userMessageID: userMessage.id,

@@ -335,6 +335,8 @@ export function MessageTimeline(props: {
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
     showToolCalls: settings.general.showToolCalls,
+    // only the web UI can fetch artifact bytes; desktop's renderer origin and navigation policy cannot
+    showFileDownloads: () => platform.platform === "web",
     inlineComments: settings.general.newLayoutDesigns,
   })
   const activeMessageID = projection.activeMessageID
