@@ -708,7 +708,7 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
-export function renderable(part: PartType, showReasoningSummaries = true, artifactHref?: ArtifactHrefFn) {
+export function renderable(part: PartType, showReasoningSummaries: boolean, artifactHref: ArtifactHrefFn | undefined) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
