@@ -1361,6 +1361,55 @@ describe("session.message-v2.toModelMessage", () => {
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
     expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
   })
+
+  test("assistant file parts contribute nothing to model messages", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [
+          {
+            ...basePart("m-user", "p1"),
+            type: "text",
+            text: "generate a report",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("m-asst", "msg_m-user"),
+        parts: [
+          {
+            ...basePart("m-asst", "p2"),
+            type: "text",
+            text: "done",
+          },
+          {
+            ...basePart("m-asst", "p3"),
+            type: "file",
+            mime: "application/zip",
+            filename: "bundle.zip",
+            url: "/session/session/message/msg_m-asst/part/prt_p3/artifact",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    const serialized = JSON.stringify(result)
+
+    expect(serialized).not.toContain("bundle.zip")
+    expect(serialized).not.toContain("application/zip")
+    expect(serialized).not.toContain("artifact")
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "generate a report" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+      },
+    ])
+  })
 })
 
 describe("session.message-v2.fromError", () => {
