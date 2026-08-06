@@ -1580,3 +1580,40 @@ body:not([data-new-layout]) {
     color: var(--text-weak);
   }
 }
+
+[data-component="file-part"] {
+  [data-slot="file-part-link"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-weak-base);
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  [data-slot="file-part-link"]:hover {
+    background: var(--background-strong);
+  }
+
+  [data-slot="file-part-icon"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+  }
+
+  [data-slot="file-part-action"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--icon-weak);
+  }
+
+  [data-slot="file-part-name"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
