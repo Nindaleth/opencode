@@ -7,6 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
+import { SessionArtifact } from "./artifact"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
@@ -115,6 +116,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const status = yield* SessionStatus.Service
     const sessions = yield* Session.Service
+    const artifactStore = yield* SessionArtifact.Service
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
     const processor = yield* SessionProcessor.Service
@@ -1249,6 +1251,8 @@ const layer = Layer.effect(
               Effect.provideService(Permission.Service, permission),
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(Session.Service, sessions),
+              Effect.provideService(SessionArtifact.Service, artifactStore),
               Effect.provideService(Truncate.Service, truncate),
               Effect.provideService(RuntimeFlags.Service, flags),
             )
@@ -1615,6 +1619,7 @@ export const node = LayerNode.make({
   deps: [
     SessionStatus.node,
     Session.node,
+    SessionArtifact.node,
     Agent.node,
     Provider.node,
     SessionProcessor.node,

@@ -16,6 +16,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { debugPrompt } from "@/cli/cmd/debug/prompt.handler"
 import type { CliError } from "@/cli/effect-cmd"
 import { Session } from "@/session/session"
+import { SessionArtifact } from "@/session/artifact"
 import { cliIt } from "../../../lib/cli-process"
 import { testEffect } from "../../../lib/effect"
 
@@ -119,6 +120,7 @@ const it = testEffect(
           return undefined as never
         }),
     }),
+    Layer.mock(SessionArtifact.Service)({}),
   ),
 )
 

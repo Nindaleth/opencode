@@ -7,6 +7,7 @@ import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
+import { SessionArtifact } from "@/session/artifact"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { SessionProcessor } from "@/session/processor"
 import { SessionTools } from "@/session/tools"
@@ -61,7 +62,16 @@ const fakeTruncate = Truncate.Service.of({
   limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 50 * 1024 }),
 } satisfies Truncate.Interface)
 
+const fakeArtifact = SessionArtifact.Service.of({
+  write: () => Effect.void,
+  read: () => Effect.succeed(undefined),
+  removeSession: () => Effect.void,
+  sweep: () => Effect.void,
+})
+
 const layer = Layer.mergeAll(
+  Layer.mock(Session.Service)({}),
+  Layer.succeed(SessionArtifact.Service, fakeArtifact),
   Layer.succeed(Plugin.Service, fakePlugin),
   Layer.succeed(Permission.Service, fakePermission),
   Layer.succeed(MCP.Service, fakeMcp()),
