@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
 import { Global } from "@opencode-ai/core/global"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionArtifact } from "@/session/artifact"
@@ -29,6 +30,7 @@ const lifecycle = testEffect(
     LayerNode.group([
       SessionArtifact.node,
       Session.node,
+      Database.node,
       EventV2Bridge.node,
       SessionProjector.node,
       CrossSpawnSpawner.node,
