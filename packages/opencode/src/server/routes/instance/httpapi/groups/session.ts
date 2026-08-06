@@ -102,6 +102,7 @@ export const SessionPaths = {
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
+  artifact: `${root}/:sessionID/message/:messageID/part/:partID/artifact`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -198,6 +199,18 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.message",
             summary: "Get message",
             description: "Retrieve a specific message from a session by its message ID.",
+          }),
+        ),
+        HttpApiEndpoint.get("artifact", SessionPaths.artifact, {
+          params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()), "Artifact bytes"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.artifact",
+            summary: "Download session artifact",
+            description: "Serve the bytes of a file part produced during the session.",
           }),
         ),
         HttpApiEndpoint.post("create", SessionPaths.create, {

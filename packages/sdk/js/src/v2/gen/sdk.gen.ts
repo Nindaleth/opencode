@@ -177,6 +177,8 @@ import type {
   QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionArtifactErrors,
+  SessionArtifactResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -3861,6 +3863,42 @@ export class Session2 extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionMessageResponses, SessionMessageErrors, ThrowOnError>({
       url: "/session/{sessionID}/message/{messageID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Download session artifact
+   *
+   * Serve the bytes of a file part produced during the session.
+   */
+  public artifact<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      partID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "path", key: "partID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionArtifactResponses, SessionArtifactErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}/artifact",
       ...options,
       ...params,
     })
