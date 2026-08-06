@@ -443,15 +443,20 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
                 ),
               )
             if (!stored) continue
-            yield* session.updatePart({
-              id: partID,
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-              type: "file",
-              mime: artifact.mime,
-              filename: artifact.filename,
-              url: `/session/${ctx.sessionID}/message/${input.processor.message.id}/part/${partID}/artifact`,
-            } satisfies SessionV1.FilePart)
+            yield* session
+              .updatePart({
+                id: partID,
+                sessionID: ctx.sessionID,
+                messageID: input.processor.message.id,
+                type: "file",
+                mime: artifact.mime,
+                filename: artifact.filename,
+                url: `/session/${ctx.sessionID}/message/${input.processor.message.id}/part/${partID}/artifact`,
+              } satisfies SessionV1.FilePart)
+              .pipe(
+                // Same rule as the write above: the download must never fail the tool call.
+                Effect.catchCause((cause) => Effect.logWarning("failed to publish MCP artifact part", { cause })),
+              )
           }
 
           const truncated = yield* truncate.output(classified.text.join("\n\n"), {}, input.agent)
@@ -585,7 +590,7 @@ const MIME_EXTENSIONS: Record<string, string> = {
 export type McpContentItem =
   | { type: "text"; text: string }
   | { type: "image"; mimeType: string; data: string }
-  | { type: "resource"; resource: { uri: string; mimeType?: string; text?: string; blob?: string } }
+  | { type: "resource"; resource: { uri: string; name?: string; mimeType?: string; text?: string; blob?: string } }
   | { type: string; [key: string]: unknown }
 
 /**
@@ -607,19 +612,24 @@ export function classifyMcpContent(content: readonly McpContentItem[], limits: {
     }
 
     if (item.type === "image" && typeof item.data === "string" && typeof item.mimeType === "string") {
-      if (base64Size(item.data) <= limits.maxBytes) {
-        attachments.push({ type: "file", mime: item.mimeType, url: dataUrl(item.mimeType, item.data) })
-        artifacts.push({
-          mime: item.mimeType,
-          filename: artifactFilename(undefined, item.mimeType, artifacts.length),
-          base64: item.data,
-        })
+      const size = base64Size(item.data)
+      if (size > limits.maxBytes) {
+        text.push(
+          `[Binary MCP image omitted: (${item.mimeType}, ${formatBytes(size)}) exceeds ${formatBytes(limits.maxBytes)}]`,
+        )
+        continue
       }
+      attachments.push({ type: "file", mime: item.mimeType, url: dataUrl(item.mimeType, item.data) })
+      artifacts.push({
+        mime: item.mimeType,
+        filename: artifactFilename(undefined, undefined, item.mimeType, artifacts.length),
+        base64: item.data,
+      })
       continue
     }
 
     if (item.type !== "resource" || !isRecord(item.resource)) continue
-    const resource = item.resource as { uri: string; mimeType?: string; text?: string; blob?: string }
+    const resource = item.resource as { uri: string; name?: string; mimeType?: string; text?: string; blob?: string }
     if (resource.text) text.push(resource.text)
     if (!resource.blob) continue
 
@@ -632,7 +642,7 @@ export function classifyMcpContent(content: readonly McpContentItem[], limits: {
       continue
     }
 
-    const filename = artifactFilename(resource.uri, mime, artifacts.length)
+    const filename = artifactFilename(resource.name, resource.uri, mime, artifacts.length)
     artifacts.push({ mime, filename, base64: resource.blob })
 
     if (SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
@@ -650,7 +660,9 @@ function dataUrl(mime: string, base64: string) {
   return `data:${mime};base64,${base64}`
 }
 
-function artifactFilename(uri: string | undefined, mime: string, index: number) {
+function artifactFilename(name: string | undefined, uri: string | undefined, mime: string, index: number) {
+  const named = name ? sanitizeFilename(name) : ""
+  if (named) return named
   const candidate = uri ? sanitizeFilename(uri.split("/").pop() ?? "") : ""
   if (candidate) return candidate
   return `artifact-${index + 1}.${MIME_EXTENSIONS[mime] ?? "bin"}`
