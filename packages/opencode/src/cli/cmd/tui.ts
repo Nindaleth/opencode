@@ -270,31 +270,34 @@ export const TuiThreadCommand = cmd({
         const { Effect } = await import("effect")
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
-        await Effect.runPromise(
-          run({
-            url: transport.url,
-            async onSnapshot() {
-              const tui = writeHeapSnapshot("tui.heapsnapshot")
-              const server = await client.call("snapshot", undefined)
-              return [tui, server]
-            },
-            config,
-            pluginHost: createLegacyTuiPluginHost(),
-            directory: cwd,
-            fetch: transport.fetch,
-            headers: transport.headers,
-            events: transport.events,
-            args: {
-              continue: args.continue,
-              sessionID: args.session,
-              agent: args.agent,
-              model: args.model,
-              prompt,
-              fork: args.fork,
-              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
-            },
-          }),
-        )
+        const tui = {
+          url: transport.url,
+          onReload: async () => {
+            const result = await client.call("reloadInstance", { directory: cwd })
+            if (!result.ok) throw new Error(result.message)
+          },
+          async onSnapshot() {
+            const tui = writeHeapSnapshot("tui.heapsnapshot")
+            const server = await client.call("snapshot", undefined)
+            return [tui, server]
+          },
+          config,
+          pluginHost: createLegacyTuiPluginHost(),
+          directory: cwd,
+          fetch: transport.fetch,
+          headers: transport.headers,
+          events: transport.events,
+          args: {
+            continue: args.continue,
+            sessionID: args.session,
+            agent: args.agent,
+            model: args.model,
+            prompt,
+            fork: args.fork,
+            auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+          },
+        }
+        await Effect.runPromise(run(tui))
       } finally {
         await stop()
       }

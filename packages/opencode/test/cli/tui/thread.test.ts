@@ -22,6 +22,14 @@ describe("tui thread", () => {
     expect(source).toMatch(/new Worker\(file, \{\s*env: Object\.fromEntries\(\s*Object\.entries\(process\.env\)/)
   })
 
+  test("keeps signal reload global and wires local reload to the startup directory", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+
+    expect(source).toContain('client.call("reload", undefined)')
+    expect(source).toContain('client.call("reloadInstance", { directory: cwd })')
+    expect(source).toMatch(/onReload:\s*async\s*\(\)\s*=>/)
+  })
+
   async function check(project?: string) {
     await using tmp = await tmpdir({ git: true })
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")
