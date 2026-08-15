@@ -119,6 +119,7 @@ const appBindingCommands = [
   "provider.connect",
   "console.org.switch",
   "opencode.status",
+  "opencode.reload",
   "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
@@ -144,6 +145,7 @@ export type TuiInput = {
   args: Args
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
+  onReload?: () => Promise<void>
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -317,6 +319,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                   <LocationProvider>
                                                                     <App
                                                                       onSnapshot={input.onSnapshot}
+                                                                      onReload={input.onReload}
                                                                       pluginHost={input.pluginHost}
                                                                     />
                                                                   </LocationProvider>
@@ -362,7 +365,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPluginHost }) {
+function App(props: {
+  onSnapshot?: () => Promise<string[]>
+  onReload?: () => Promise<void>
+  pluginHost: TuiPluginHost
+}) {
   const startup = useTuiStartup()
   const tuiConfig = useTuiConfig()
   const route = useRoute()
@@ -549,6 +556,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   )
 
   const connected = useConnected()
+  const [reloading, setReloading] = createSignal(false)
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -769,6 +777,29 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
         category: "System",
       },
+      ...(props.onReload
+        ? [
+            {
+              name: "opencode.reload",
+              title: "Reload configuration",
+              slashName: "reload",
+              category: "System",
+              enabled: () => !reloading(),
+              run: async () => {
+                if (reloading()) return
+                setReloading(true)
+                dialog.clear()
+                await props
+                  .onReload?.()
+                  .then(() => toast.show({ message: "Configuration reloaded", variant: "success" }))
+                  .catch((error) =>
+                    toast.show({ title: "Reload failed", message: errorMessage(error), variant: "error" }),
+                  )
+                  .finally(() => setReloading(false))
+              },
+            },
+          ]
+        : []),
       {
         name: "opencode.debug",
         title: "View debug info",
