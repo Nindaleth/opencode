@@ -63,6 +63,45 @@ test("legacy page key aliases compile as page keys", async () => {
   }
 })
 
+test("registers a reload override for the reload command", async () => {
+  let bindings = 0
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig({ reload: "ctrl+shift+r" })
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const offLayer = keymap.registerLayer({
+      mode: OPENCODE_BASE_MODE,
+      commands: [{ name: "opencode.reload", run() {} }],
+      bindings: config.keybinds.gather("app", ["opencode.reload"]),
+    })
+    bindings =
+      keymap
+        .getCommandBindings({
+          visibility: "registered",
+          commands: ["opencode.reload"],
+        })
+        .get("opencode.reload")?.length ?? 0
+    onCleanup(() => {
+      offLayer()
+      offKeymap()
+    })
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    expect(bindings).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("mode-less bindings stay active when opencode mode changes", async () => {
   const counts: Record<string, Record<string, number>> = {}
 

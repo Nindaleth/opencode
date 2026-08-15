@@ -82,6 +82,7 @@ export const Definitions = {
   scrollbar_toggle: keybind("none", "Toggle session scrollbar"),
   status_view: keybind("<leader>s", "View status"),
   debug_view: keybind("none", "View debug info"),
+  reload: keybind("none", "Reload configuration"),
 
   session_export: keybind("<leader>x", "Export session to editor"),
   session_copy: keybind("none", "Copy session transcript"),
@@ -290,6 +291,7 @@ export const CommandMap = {
   scrollbar_toggle: "session.toggle.scrollbar",
   status_view: "opencode.status",
   debug_view: "opencode.debug",
+  reload: "opencode.reload",
   session_export: "session.export",
   session_copy: "session.copy",
   session_move: "session.move",

@@ -86,6 +86,18 @@ test("resolves a session move keybind", () => {
   expect(config.keybinds.get("session.move")).toMatchObject([{ key: "ctrl+o" }])
 })
 
+test("leaves reload unbound by default", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.has("opencode.reload")).toBe(false)
+})
+
+test("resolves a reload keybind override", () => {
+  const config = resolve({ keybinds: { reload: "ctrl+shift+r" } }, { terminalSuspend: true })
+
+  expect(config.keybinds.get("opencode.reload")).toMatchObject([{ key: "ctrl+shift+r" }])
+})
+
 test("disables suspend and assigns ctrl+z to undo when unsupported", () => {
   const config = resolve({}, { terminalSuspend: false })
 
