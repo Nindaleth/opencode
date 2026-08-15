@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test"
+import { expect, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
@@ -13,8 +13,6 @@ type SetupInput = {
 
 async function setupApp(input: SetupInput) {
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const core = await import("@opentui/core")
-  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventSource()
   const calls = createFetch()
   let api!: TuiPluginApi
@@ -28,6 +26,7 @@ async function setupApp(input: SetupInput) {
       config: createTuiResolvedConfig({ plugin_enabled: {} }),
       fetch: calls.fetch,
       events: events.source,
+      createRenderer: async () => setup.renderer,
       args: {},
       onReload: input.onReload,
       pluginHost: {
@@ -50,7 +49,6 @@ async function setupApp(input: SetupInput) {
       api.keymap.dispatchCommand("app.exit")
       await task
       if (!setup.renderer.isDestroyed) setup.renderer.destroy()
-      mock.restore()
     },
   }
 }
