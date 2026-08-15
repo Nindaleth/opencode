@@ -10,6 +10,7 @@ import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { TuiReload } from "@/cli/tui/reload"
 
 Heap.start()
 
@@ -68,6 +69,9 @@ export const rpc = {
         yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
       }),
     )
+  },
+  async reloadInstance(input: { directory: string }) {
+    return AppRuntime.runPromise(TuiReload.reload(input.directory))
   },
   async shutdown() {
     await InstanceRuntime.disposeAllInstances()
