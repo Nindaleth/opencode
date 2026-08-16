@@ -264,6 +264,56 @@ describe("plugin.loader.shared", () => {
     ),
   )
 
+  it.live("loads configured cost-limit without npm install", () =>
+    withTmp(
+      async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify(
+            {
+              plugin: [["cost-limit", { default: { parent: 5, subagents: 10 } }]],
+            },
+            null,
+            2,
+          ),
+        )
+        return {}
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const install = spyOn(Npm, "add").mockRejectedValue(new Error("should not install cost-limit"))
+
+          try {
+            const hooks = yield* load(tmp.path)
+            expect(hooks).toHaveLength(1)
+            const gate = hooks[0]!["experimental.session.turn.before"]
+            expect(gate).toBeDefined()
+
+            const first = { continue: true } as { continue: boolean; reason?: string }
+            const second = { continue: true } as { continue: boolean; reason?: string }
+            const input = (root: number) => ({
+              sessionID: "ses_root",
+              rootID: "ses_root",
+              agent: "build",
+              step: 1,
+              model: { providerID: "test", modelID: "test-model" },
+              rootModel: { providerID: "test", modelID: "test-model" },
+              rootUserMessageID: "msg_1",
+              cost: { session: root, root, descendants: 0 },
+            })
+            yield* Effect.promise(() => gate!(input(0), first))
+            yield* Effect.promise(() => gate!(input(9), second))
+
+            expect(first.continue).toBe(true)
+            expect(second.continue).toBe(false)
+            expect(install).not.toHaveBeenCalled()
+          } finally {
+            install.mockRestore()
+          }
+        }),
+    ),
+  )
+
   it.live("still sends unknown configured plugin specs through npm resolution", () =>
     withTmp(
       async (dir) => {

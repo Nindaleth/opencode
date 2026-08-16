@@ -240,6 +240,105 @@ function reply(input: SessionPrompt.PromptInput, text: string): SessionV1.WithPa
 }
 
 describe("tool.task", () => {
+  it.instance("task result keeps real output and appends the stop notice", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const persist = Effect.fn("TaskToolTest.persist")(function* (
+        sessionID: SessionID,
+        parentID: MessageID,
+        text: string,
+        synthetic: boolean,
+      ) {
+        const id = MessageID.ascending()
+        const info: SessionV1.Assistant = {
+          id,
+          role: "assistant",
+          parentID,
+          sessionID,
+          mode: "general",
+          agent: "general",
+          cost: 0,
+          path: { cwd: "/tmp", root: "/tmp" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          finish: "stop",
+          time: { created: Date.now(), completed: Date.now() },
+        }
+        yield* sessions.updateMessage(info)
+        const part = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: id,
+          sessionID,
+          type: "text",
+          text,
+          synthetic,
+        })
+        return { info, parts: [part] } satisfies SessionV1.WithParts
+      })
+
+      const stoppedOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.gen(function* () {
+            const user = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: input.sessionID,
+              agent: input.agent ?? "general",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* persist(input.sessionID, user.id, "the real findings", false)
+            const followup = yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              role: "user",
+              sessionID: input.sessionID,
+              agent: input.agent ?? "general",
+              model: ref,
+              time: { created: Date.now() },
+            })
+            yield* sessions.updatePart({
+              id: PartID.ascending(),
+              messageID: followup.id,
+              sessionID: input.sessionID,
+              type: "text",
+              text: "user follow-up must not be returned",
+            })
+            return yield* persist(input.sessionID, followup.id, "Stopped: budget reached.", true)
+          }),
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stoppedOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("the real findings")
+      expect(result.output).toContain("Stopped: budget reached.")
+      expect(result.output).not.toContain("user follow-up must not be returned")
+      expect(result.output.indexOf("the real findings")).toBeLessThan(result.output.indexOf("Stopped: budget reached."))
+    }),
+  )
+
   it.instance(
     "description sorts subagents by name and is stable across calls",
     () =>

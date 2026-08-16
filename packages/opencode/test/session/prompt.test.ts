@@ -57,6 +57,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import type { Hooks } from "@opencode-ai/plugin"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -290,6 +291,68 @@ const withRecordingBeforeAndAfterPlugin = testEffect(
     [MCP.node, makeMcp()],
     [RuntimeFlags.node, runtimeFlags],
     [Plugin.node, recordingBeforeAndAfterPluginLayer],
+  ]),
+)
+
+type TurnGateInput = Parameters<NonNullable<Hooks["experimental.session.turn.before"]>>[0]
+
+const turnGateInputs: TurnGateInput[] = []
+const triggeredHookNames: string[] = []
+let turnGateDecision: ((input: TurnGateInput) => { continue: boolean; reason?: string }) | undefined
+
+const turnGateHooks: Hooks[] = [
+  {
+    "experimental.session.turn.before": async (input, output) => {
+      turnGateInputs.push(input)
+      const decision = turnGateDecision?.(input)
+      if (!decision || decision.continue) return
+      output.continue = false
+      output.reason = decision.reason
+    },
+  },
+]
+
+const turnGatePluginLayer = Layer.mock(Plugin.Service)({
+  init: () => Effect.void,
+  list: () => Effect.succeed(turnGateHooks),
+  trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) =>
+    Effect.promise(async () => {
+      triggeredHookNames.push(name)
+      for (const hook of turnGateHooks) {
+        const fn = (hook as Record<string, unknown>)[name]
+        if (typeof fn === "function") await (fn as (i: Input, o: Output) => Promise<void>)(input, output)
+      }
+      return output
+    }),
+})
+
+const withTurnGatePlugin = testEffect(
+  LayerNode.compile(LayerNode.group([promptRoot, testLLMServerNode]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, turnGatePluginLayer],
+  ]),
+)
+
+const noGatePluginLayer = Layer.mock(Plugin.Service)({
+  init: () => Effect.void,
+  list: () => Effect.succeed([]),
+  trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) =>
+    Effect.sync(() => {
+      triggeredHookNames.push(name)
+      return output
+    }),
+})
+
+const withNoGatePlugin = testEffect(
+  LayerNode.compile(LayerNode.group([promptRoot, testLLMServerNode]), [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, noGatePluginLayer],
   ]),
 )
 const withMcpInstructions = testEffect(
@@ -2698,4 +2761,112 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+withTurnGatePlugin.instance("turn gate veto breaks the loop with a synthetic stop message", () =>
+  Effect.gen(function* () {
+    turnGateInputs.length = 0
+    triggeredHookNames.length = 0
+    turnGateDecision = (input) => (input.step >= 2 ? { continue: false, reason: "over budget" } : { continue: true })
+
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Turn gate veto",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* writeText(path.join(dir, "probe.txt"), "probe")
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "find text files" }],
+    })
+    yield* llm.tool("glob", { pattern: "**/*.txt" })
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(result.info.role).toBe("assistant")
+    expect(result.info.role === "assistant" && result.info.finish).toBe("stop")
+    expect(result.info.role === "assistant" && result.info.error).toBeUndefined()
+    expect(result.info.role === "assistant" && result.info.cost).toBe(0)
+
+    const text = result.parts.find((part) => part.type === "text")
+    expect(text?.type === "text" && text.synthetic).toBe(true)
+    expect(text?.type === "text" && text.text).toBe("over budget")
+
+    expect(turnGateInputs).toHaveLength(2)
+    expect(turnGateInputs[0]).toMatchObject({
+      sessionID: session.id,
+      rootID: session.id,
+      agent: "build",
+      step: 1,
+    })
+    expect(turnGateInputs[0]?.parentID).toBeUndefined()
+    expect(turnGateInputs[0]?.cost).toEqual({ session: 0, root: 0, descendants: 0 })
+    expect(turnGateInputs[0]?.rootModel).toEqual({ providerID: "test", modelID: "test-model" })
+    expect(turnGateInputs[0]?.rootUserMessageID).toMatch(/^msg/)
+    expect(turnGateInputs[1]?.step).toBe(2)
+    expect(turnGateInputs[1]?.cost.descendants).toBe(0)
+  }),
+)
+
+withTurnGatePlugin.instance("turn gate allow is a no-op", () =>
+  Effect.gen(function* () {
+    turnGateInputs.length = 0
+    triggeredHookNames.length = 0
+    turnGateDecision = () => ({ continue: true })
+
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Turn gate allow",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "say hello" }],
+    })
+    yield* llm.text("hello")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(result.info.role).toBe("assistant")
+    const text = result.parts.find((part) => part.type === "text")
+    expect(text?.type === "text" && text.text).toBe("hello")
+    expect(text?.type === "text" && text.synthetic).toBeFalsy()
+    expect(turnGateInputs).toHaveLength(1)
+  }),
+)
+
+withNoGatePlugin.instance("no registered turn gate hook means the gate is never triggered", () =>
+  Effect.gen(function* () {
+    triggeredHookNames.length = 0
+
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "No turn gate",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "say hello" }],
+    })
+    yield* llm.text("hello")
+
+    yield* prompt.loop({ sessionID: session.id })
+
+    expect(triggeredHookNames).not.toContain("experimental.session.turn.before")
+  }),
 )

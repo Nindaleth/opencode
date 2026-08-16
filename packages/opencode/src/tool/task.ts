@@ -11,7 +11,7 @@ import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Plugin } from "@/plugin"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -240,6 +240,9 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
+      const lastRealText = (parts: SessionV1.Part[]) =>
+        parts.findLast((item): item is SessionV1.TextPart => item.type === "text" && !item.synthetic)?.text
+
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
         const result = yield* ops.prompt({
@@ -253,7 +256,23 @@ export const TaskTool = Tool.define(
           agent: next.name,
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        const own = lastRealText(result.parts)
+        if (own !== undefined) return own
+
+        // A plugin-stopped loop leaves the notice as its own trailing assistant
+        // message. Returning only the notice would discard the subagent's work
+        // and read as a failure to the parent model, which then retries.
+        const notice = result.parts.findLast((item) => item.type === "text")?.text
+        if (notice === undefined) return ""
+        const previous = yield* sessions
+          .findMessage(
+            nextSession.id,
+            (item) =>
+              item.info.role === "assistant" && item.info.id < result.info.id && lastRealText(item.parts) !== undefined,
+          )
+          .pipe(Effect.orDie)
+        const output = Option.isSome(previous) ? lastRealText(previous.value.parts) : undefined
+        return [output, notice].filter(Boolean).join("\n\n")
       })
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (

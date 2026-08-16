@@ -387,3 +387,71 @@ Format as a structured prompt that a new agent can use to resume work.
 ```
 
 When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+
+---
+
+### Turn gate hook
+
+Stop a session's provider loop before the next turn runs:
+
+```ts title=".opencode/plugins/turn-limit.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const TurnLimitPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.turn.before": async (input, output) => {
+      if (input.step < 50) return
+      output.continue = false
+      output.reason = `Stopped after ${input.step} turns. Send a new message to continue.`
+    },
+  }
+}
+```
+
+`experimental.session.turn.before` fires once per iteration of a session's loop, before the turn is dispatched. It gates ordinary turns, subagent dispatch and compaction alike, so a stopped session cannot spawn new work.
+
+Setting `output.continue` to `false` breaks the loop the same way a model finishing naturally does - no interrupt, no aborted tool calls. The session writes one assistant message with `finish: "stop"`, zero cost and a single synthetic text part carrying `output.reason`. That text renders in the transcript and enters model context, so the model knows it was cut off rather than done. The next user prompt resumes normally.
+
+The `input` carries:
+
+- `sessionID`, `parentID`, `agent`, `step` - where in the tree and how deep into the loop you are
+- `rootID` - the topmost ancestor session, equal to `sessionID` at a root
+- `model`, `rootModel` - the model for this turn and for the root session
+- `rootUserMessageID` - the last non-synthetic user message in the root session, which changes on every new user prompt
+- `cost.session`, `cost.root`, `cost.descendants` - cumulative session-lifetime dollar totals for this session, the root, and the pooled spend of every descendant of the root
+
+Cost figures are lifetime totals; opencode applies no windowing. A plugin that wants a per-prompt budget baselines the figures itself and rebaselines whenever `rootUserMessageID` changes.
+
+Accounting is skipped entirely when no plugin declares this hook, so it costs nothing when unused.
+
+---
+
+### Cost limits
+
+The built-in `cost-limit` plugin bounds what a single prompt can spend, with one budget for the session's own cost and one for the pooled cost of everything it delegates to subagents:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    [
+      "cost-limit",
+      {
+        "default": { "parent": 5.0, "subagents": 10.0 },
+        "rules": [
+          { "model": "github-copilot/claude-opus-*", "parent": 8.0, "subagents": 15.0 },
+          { "model": "github-copilot/gpt-5.6-luna", "parent": 1.5, "subagents": 4.0 }
+        ]
+      }
+    ]
+  ]
+}
+```
+
+Both numbers are dollars per user prompt. `parent` bounds the driving session's own spend, `subagents` bounds the pooled spend of every session it delegates to. Reaching either stops processing; sending a new message grants a fresh allowance.
+
+Rules match `providerID/modelID` of the **root** session's model with `*` wildcards, and the last match wins. A matching rule replaces `default` outright rather than merging with it, so omitting a number in the winning rule disables that budget. Omitting `default` means no limits apply unless a rule matches.
+
+Both budgets key off the root model even when subagents run different models, because the pool is a dollar amount regardless of what spends it.
+
+Budgets bound continuation, not admission: the first turn of a prompt always runs, and a session already in flight finishes its current turn before stopping. A stopped subagent hands its partial work back to the parent along with the reason it ended early, and the parent stops at its own next turn boundary.

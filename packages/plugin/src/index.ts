@@ -353,6 +353,34 @@ export interface Hooks {
     output: { text: string },
   ) => Promise<void>
   /**
+   * Called once per iteration of a session's provider loop, before the turn
+   * runs. Set `output.continue` to `false` to stop the loop cleanly; `reason`
+   * is shown to the user and enters model context on resume.
+   *
+   * - `rootID`: the topmost ancestor session, equal to `sessionID` at a root
+   * - `rootUserMessageID`: the last non-synthetic user message in the root
+   * - `cost`: cumulative session-lifetime totals in dollars; no windowing is
+   *   applied, so a plugin that wants a per-prompt budget must baseline itself
+   */
+  "experimental.session.turn.before"?: (
+    input: {
+      sessionID: string
+      rootID: string
+      parentID?: string
+      agent: string
+      step: number
+      model: { providerID: string; modelID: string }
+      rootModel: { providerID: string; modelID: string }
+      rootUserMessageID: string
+      cost: {
+        session: number
+        root: number
+        descendants: number
+      }
+    },
+    output: { continue: boolean; reason?: string },
+  ) => Promise<void>
+  /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (
