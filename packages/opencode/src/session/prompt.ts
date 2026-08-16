@@ -1085,6 +1085,99 @@ const layer = Layer.effect(
       return yield* loop({ sessionID: input.sessionID })
     })
 
+    // A user message is "real" when it carries at least one non-synthetic part.
+    // Compaction auto-continue messages are entirely synthetic, so keying the
+    // budget window on them would silently reset the allowance mid-prompt.
+    const isRealUser = (msg: SessionV1.WithParts) =>
+      msg.info.role === "user" && !msg.parts.every((part) => "synthetic" in part && part.synthetic)
+
+    const resolveRoot = Effect.fn("SessionPrompt.resolveRoot")(function* (start: Session.Info) {
+      let current = start
+      while (current.parentID) {
+        const parent = yield* sessions.get(current.parentID).pipe(Effect.option)
+        if (Option.isNone(parent)) return
+        current = parent.value
+      }
+      return current.id
+    })
+
+    const turnAccounting = Effect.fn("SessionPrompt.turnAccounting")(function* (input: {
+      sessionID: SessionID
+      rootID: SessionID
+    }) {
+      const root = yield* sessions.get(input.rootID).pipe(Effect.option)
+      if (Option.isNone(root)) return
+      const rootUser = yield* sessions.findMessage(input.rootID, isRealUser).pipe(Effect.orDie)
+      if (Option.isNone(rootUser) || rootUser.value.info.role !== "user") return
+      const own =
+        input.sessionID === input.rootID
+          ? Option.some(root.value)
+          : yield* sessions.get(input.sessionID).pipe(Effect.option)
+
+      // Session trees are shallow and parent_id is indexed, so a breadth-first
+      // walk beats a recursive CTE in both cost and clarity here.
+      let descendants = 0
+      let frontier: SessionID[] = [input.rootID]
+      while (frontier.length) {
+        const children = (yield* Effect.forEach(frontier, (id) => sessions.children(id))).flat()
+        descendants = children.reduce((sum, child) => sum + (child.cost ?? 0), descendants)
+        frontier = children.map((child) => child.id)
+      }
+
+      return {
+        rootModel: {
+          providerID: rootUser.value.info.model.providerID,
+          modelID: rootUser.value.info.model.modelID,
+        },
+        rootUserMessageID: rootUser.value.info.id,
+        cost: {
+          session: Option.isSome(own) ? (own.value.cost ?? 0) : 0,
+          root: root.value.cost ?? 0,
+          descendants,
+        },
+      }
+    })
+
+    const stopTurn = Effect.fn("SessionPrompt.stopTurn")(function* (input: {
+      sessionID: SessionID
+      parentID: MessageID
+      agent: string
+      variant?: string
+      model: { id: SessionV1.Assistant["modelID"]; providerID: SessionV1.Assistant["providerID"] }
+      reason?: string
+    }) {
+      const ctx = yield* InstanceState.context
+      const now = Date.now()
+      const msg: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        parentID: input.parentID,
+        role: "assistant",
+        mode: input.agent,
+        agent: input.agent,
+        variant: input.variant,
+        path: { cwd: ctx.directory, root: ctx.worktree },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: input.model.id,
+        providerID: input.model.providerID,
+        // A normal terminal finish, so a resumed loop will not try to continue
+        // this message; the next user prompt has a higher id and proceeds.
+        finish: "stop",
+        time: { created: now, completed: now },
+        sessionID: input.sessionID,
+      }
+      yield* sessions.updateMessage(msg)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: msg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: input.reason ?? "Stopped by a plugin.",
+        synthetic: true,
+        time: { start: now, end: now },
+      })
+    })
+
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
       const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user").pipe(Effect.orDie)
       if (Option.isSome(match)) return match.value
@@ -1098,6 +1191,8 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // A session's ancestry never changes, so resolve it at most once.
+        let rootID: SessionID | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1154,6 +1249,52 @@ const layer = Layer.effect(
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+
+          // Gating here covers normal turns, subtask dispatch and compaction
+          // alike, so an over-budget session cannot spawn new subagents. The
+          // previous turn's cost is fully committed by now, so the numbers are
+          // settled. Skip every query when nothing is listening.
+          if ((yield* plugin.list()).some((hook) => hook["experimental.session.turn.before"])) {
+            if (!rootID) rootID = yield* resolveRoot(session)
+            // A deleted ancestor, or a root session with no real user message, skips
+            // the gate for this iteration rather than failing the turn.
+            const accounting = rootID === undefined ? undefined : yield* turnAccounting({ sessionID, rootID })
+            if (rootID !== undefined && accounting !== undefined) {
+              const decision: { continue: boolean; reason?: string } = { continue: true }
+              yield* plugin.trigger(
+                "experimental.session.turn.before",
+                {
+                  sessionID,
+                  rootID,
+                  parentID: session.parentID,
+                  agent: lastUser.agent,
+                  step,
+                  model: { providerID: model.providerID, modelID: model.id },
+                  rootModel: accounting.rootModel,
+                  rootUserMessageID: accounting.rootUserMessageID,
+                  cost: accounting.cost,
+                },
+                decision,
+              )
+              if (!decision.continue) {
+                yield* Effect.logInfo("turn gate stopped the loop", {
+                  "session.id": sessionID,
+                  step,
+                  reason: decision.reason,
+                })
+                yield* stopTurn({
+                  sessionID,
+                  parentID: lastUser.id,
+                  agent: lastUser.agent,
+                  variant: lastUser.model.variant,
+                  model,
+                  reason: decision.reason,
+                })
+                break
+              }
+            }
+          }
+
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
