@@ -66,6 +66,7 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import { bashOutput } from "./bash-output"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1614,8 +1615,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               tool={part().tool}
               sessionID={part().sessionID}
               metadata={partMetadata()}
-              // @ts-expect-error
-              output={part().state.output}
+              output={bashOutput(part())}
               status={part().state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
