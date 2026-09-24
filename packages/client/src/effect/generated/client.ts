@@ -254,6 +254,8 @@ import type {
   VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  DebugPromptInput,
+  DebugPromptOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1528,6 +1530,18 @@ const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   diff: EndpointVcsDiff(raw),
 })
 
+const EndpointDebugPrompt = (raw: RawClient["server.debug"]) => (input?: DebugPromptInput) =>
+  preserveEffect<DebugPromptOutput>()(
+    raw["debug.prompt"]({
+      query: {
+        location: input?.["location"],
+        provider: input?.["provider"],
+        model: input?.["model"],
+        agent: input?.["agent"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointDebugLocationList = (raw: RawClient["server.debug"]) => () =>
   preserveEffect<DebugLocationListOutput>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -1537,6 +1551,7 @@ const EndpointDebugLocationEvict = (raw: RawClient["server.debug"]) => (input?: 
   )
 
 const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
+  prompt: EndpointDebugPrompt(raw),
   location: { list: EndpointDebugLocationList(raw), evict: EndpointDebugLocationEvict(raw) },
 })
 

@@ -2,6 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import type { Agent } from "@opencode/schema/agent"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Model } from "@opencode/schema/model"
 import type { Effect, Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
@@ -18,6 +19,12 @@ export interface ToolEditor {
 }
 
 export interface ToolHooks {
+  readonly definition: {
+    readonly model: Model.Ref
+    readonly toolID: string
+    readonly builtin: boolean
+    description: string
+  }
   readonly "execute.before": {
     tool: string
     readonly sessionID: Session.ID
@@ -47,6 +54,7 @@ export interface ToolHooks {
 
 // Only execute.before may fail: a Tool.Error rejects the call before the tool runs.
 export interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly definition: never
   readonly "execute.before": Tool.Error
   readonly "execute.after": never
 }

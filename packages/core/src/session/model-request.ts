@@ -82,6 +82,7 @@ export interface Input {
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
   readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+  readonly preview?: boolean
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
@@ -222,7 +223,7 @@ export const layer = Layer.effect(
       const session = input.session
       const model = input.model
       const scope = { sessionID: session.id, agent: input.agent, model: model.ref, kind }
-      const tools = input.tools ?? {
+      const tools: Tool.Snapshot = input.tools ?? {
         definitions: [],
         execute: () => new Tool.Error({ message: "Tools are not available for this request" }),
       }
@@ -243,6 +244,7 @@ export const layer = Layer.effect(
             kind === "primary" || kind === "compaction"
               ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
               : {},
+          preview: input.preview,
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
@@ -254,6 +256,18 @@ export const layer = Layer.effect(
           const t = given.get(d) ?? byName.get(name)
           return t ? [[name, { ...t, description: d.description, inputSchema: d.input }] as const] : []
         }),
+      )
+      const advertised = new Map(
+        yield* Effect.forEach(Array.from(hooked), ([name, tool]) =>
+          hooks
+            .trigger("tool", "definition", {
+              model: model.ref,
+              toolID: tools.identities?.get(tool.name)?.toolID ?? tool.name,
+              builtin: tools.identities?.get(tool.name)?.builtin ?? false,
+              description: tool.description,
+            })
+            .pipe(Effect.map((event) => [name, { ...tool, description: event.description }] as const)),
+        ),
       )
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
@@ -278,7 +292,7 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
-        tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
+        tools: Array.from(advertised, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
@@ -383,7 +397,7 @@ export const layer = Layer.effect(
         // Permission.assert and the question tool throw declines as defects so tools cannot
         // catch them and turn a "no" into model-visible output. Recover them here as failures.
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
-          tools.execute({ ...call, definitions: hooked }).pipe(
+          tools.execute({ ...call, definitions: advertised }).pipe(
             Effect.catchCauseFilter(
               (cause) => {
                 const decline = cause.reasons.flatMap((r) =>

@@ -3,9 +3,20 @@ import { Effect, Option, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { requestRef } from "../location"
+import { SessionPromptPreview } from "@opencode/core/session/prompt-preview"
+import { InvalidRequestError } from "@opencode/protocol/errors"
 
 export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers) =>
   handlers
+    .handle(
+      "debug.prompt",
+      Effect.fn(function* (ctx) {
+        const preview = yield* SessionPromptPreview.Service
+        return yield* preview
+          .prepare(ctx.query)
+          .pipe(Effect.mapError((error) => new InvalidRequestError({ message: error.message })))
+      }),
+    )
     .handle(
       "debug.location",
       Effect.fn(function* () {

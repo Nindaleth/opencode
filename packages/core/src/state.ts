@@ -42,6 +42,7 @@ type GroupedRegistration = {
 }
 
 type RegistrationGroup = {
+  readonly id?: string
   failed: boolean
   readonly registrations: Set<GroupedRegistration>
   readonly report: (failure: Failure, refresh: Effect.Effect<void>) => void
@@ -55,8 +56,8 @@ const CurrentGroup = Context.Reference<RegistrationGroup | undefined>("@opencode
  * Groups registrations without coupling State to plugin identity or asynchronous cleanup.
  * A failed group is detached synchronously; its supervisor must run refresh and close its scope.
  */
-export function group(report: RegistrationGroup["report"]) {
-  const group: RegistrationGroup = { failed: false, registrations: new Set(), report }
+export function group(report: RegistrationGroup["report"], id?: string) {
+  const group: RegistrationGroup = { id, failed: false, registrations: new Set(), report }
   return <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provideService(effect, CurrentGroup, group)
 }
 
@@ -136,7 +137,7 @@ export interface Options<State, Editor> {
   /** Creates the empty base value for every rebuild. */
   readonly initial: () => State
   /** Wraps mutable state in a domain-specific editor API. */
-  readonly editor: MakeEditor<State, Editor>
+  readonly editor: (state: State, producer: () => string | undefined) => Editor
   /**
    * Observes the freshly rebuilt value outside the read path. Every registration, disposal, or
    * reload notifies once it is applied; a batch coalesces them into one notification at its end.
@@ -163,6 +164,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
   let dirty = false
   let closed = false
   let version = 0
+  let producer: string | undefined
 
   const invalidate = () => {
     dirty = true
@@ -174,8 +176,9 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
     while (true) {
       const started = version
       const next = options.initial()
-      const editor = options.editor(next)
+      const editor = options.editor(next, () => producer)
       for (const transform of transforms) {
+        producer = transform.group?.id
         try {
           transform.run(editor)
         } catch (cause) {
@@ -185,6 +188,7 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
         // A nested read can disable a group that already contributed to this candidate.
         if (version !== started) break
       }
+      producer = undefined
       if (version !== started) continue
       // Ungrouped failures still propagate; grouped failures restart from a fresh candidate.
       state = next

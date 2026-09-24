@@ -14,6 +14,8 @@ import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { PluginUpdate } from "./update.js"
 import { SubagentRouterPlugin } from "./subagent-router.js"
+import { PromptOverridesPlugin } from "./prompt-overrides.js"
+import { Location } from "../location.js"
 import { Watcher } from "../filesystem/watcher.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
@@ -51,37 +53,55 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       operation.target === "*" ||
       operation.target.endsWith(".*") ||
       operation.target.startsWith("opencode.")
-    if (selectsPlugins && operation.target !== "subagent-router") {
+    if (selectsPlugins && operation.target !== "subagent-router" && operation.target !== "prompt-overrides") {
       matched.forEach((plugin) => enabled.add(plugin.id))
       continue
     }
 
     const plugin =
-      operation.target === "subagent-router"
-        ? {
-            ...SubagentRouterPlugin.configured(operation.options),
-            revision: JSON.stringify(operation.options),
-            source: { type: "builtin" as const },
-          }
-        : yield* modules.load(operation, { install }).pipe(
+      operation.target === "prompt-overrides"
+        ? yield* Effect.gen(function* () {
+            const location = yield* Location.Service
+            const resolved = yield* PromptOverridesPlugin.loadOptions(operation.options, location.directory)
+            return {
+              ...PromptOverridesPlugin.configured(resolved),
+              revision: JSON.stringify(resolved),
+              source: { type: "builtin" as const },
+            }
+          }).pipe(
             Effect.catchCause((cause) => {
               const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-              const error = Cause.squash(cause)
-              return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
-                Effect.as({
-                  error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load",
-                  ref,
-                }),
+              return Effect.logWarning("failed to load prompt overrides", { cause, ref }).pipe(
+                Effect.as({ error: `Prompt overrides failed to load: ${Cause.squash(cause)}`, ref }),
               )
             }),
           )
+        : operation.target === "subagent-router"
+          ? {
+              ...SubagentRouterPlugin.configured(operation.options),
+              revision: JSON.stringify(operation.options),
+              source: { type: "builtin" as const },
+            }
+          : yield* modules.load(operation, { install }).pipe(
+              Effect.catchCause((cause) => {
+                const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                const error = Cause.squash(cause)
+                return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
+                  Effect.as({
+                    error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load",
+                    ref,
+                  }),
+                )
+              }),
+            )
     if ("pending" in plugin) {
       pending.add(operation.target)
       continue
     }
     if ("error" in plugin) {
       failures.set(operation.target, {
-        source: pluginSource(operation.target),
+        id: Plugin.ID.make(operation.target),
+        source: operation.target === "prompt-overrides" ? { type: "builtin" } : pluginSource(operation.target),
         state: { status: "failed", error: plugin.error, ref: plugin.ref },
         features: { server: true },
       })

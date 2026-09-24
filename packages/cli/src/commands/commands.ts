@@ -117,6 +117,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
       commands: [
+        Spec.make("prompt", {
+          description: "Preview the effective initial system prompt and tool descriptions",
+          params: {
+            ...ServerParams,
+            provider: Flag.string("provider").pipe(Flag.withDescription("Provider ID"), Flag.optional),
+            model: Flag.string("model").pipe(Flag.withDescription("Model ID"), Flag.optional),
+            agent: Flag.string("agent").pipe(Flag.withDescription("Agent ID"), Flag.optional),
+          },
+        }),
         Spec.make("agents", { description: "List all agents" }),
         Spec.make("config", { description: "List configuration sources" }),
         Spec.make("paths", {
@@ -134,7 +143,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               "log",
               "repos",
             ]).pipe(
-              Argument.withDescription("Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos"),
+              Argument.withDescription(
+                "Print only one path: db, home, data, config, cache, state, tmp, bin, log, repos",
+              ),
               Argument.optional,
             ),
           },

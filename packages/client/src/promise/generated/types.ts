@@ -6597,6 +6597,39 @@ export type VcsDiffInput = {
 
 export type VcsDiffOutput = { location: LocationPublicRef; data: Array<FileDiffInfo> }
 
+export type DebugPromptInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+    readonly model?: string | undefined
+    readonly agent?: string | undefined
+  }["location"]
+  readonly provider?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+    readonly model?: string | undefined
+    readonly agent?: string | undefined
+  }["provider"]
+  readonly model?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+    readonly model?: string | undefined
+    readonly agent?: string | undefined
+  }["model"]
+  readonly agent?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+    readonly model?: string | undefined
+    readonly agent?: string | undefined
+  }["agent"]
+}
+
+export type DebugPromptOutput = {
+  selection: { provider: string; model: string; agent: string }
+  system: Array<string>
+  tools: Array<{ name: string; description: string }>
+}
+
 export type DebugLocationListOutput = Array<LocationPublicRef>
 
 export type DebugLocationEvictInput = {

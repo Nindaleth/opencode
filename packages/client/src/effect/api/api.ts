@@ -2316,6 +2316,19 @@ export interface VcsApi<E = never> {
   readonly diff: VcsDiffOperation<E>
 }
 
+export type DebugPromptInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly provider?: string | undefined
+  readonly model?: string | undefined
+  readonly agent?: string | undefined
+}
+export type DebugPromptOutput = {
+  readonly selection: { readonly provider: string; readonly model: string; readonly agent: string }
+  readonly system: ReadonlyArray<string>
+  readonly tools: ReadonlyArray<{ readonly name: string; readonly description: string }>
+}
+export type DebugPromptOperation<E = never> = (input?: DebugPromptInput) => Effect.Effect<DebugPromptOutput, E>
+
 export type DebugLocationListOutput = ReadonlyArray<Location.PublicRef>
 export type DebugLocationListOperation<E = never> = () => Effect.Effect<DebugLocationListOutput, E>
 
@@ -2326,6 +2339,7 @@ export type DebugLocationEvictOperation<E = never> = (
 ) => Effect.Effect<DebugLocationEvictOutput, E>
 
 export interface DebugApi<E = never> {
+  readonly prompt: DebugPromptOperation<E>
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
 }
 

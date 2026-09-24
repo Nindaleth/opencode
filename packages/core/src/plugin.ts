@@ -60,7 +60,7 @@ const layer = Layer.effect(
           ref: activation.failure.ref,
           release: holdUnsafe(),
         })
-      })
+      }, plugin.id)
       const exit = yield* Effect.suspend(() =>
         plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
       ).pipe(

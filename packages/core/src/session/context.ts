@@ -51,6 +51,7 @@ export interface Loaded {
 export interface Interface {
   /** Selects the Session, agent, instructions, and tools used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  readonly selectTransient: (session: SessionSchema.Info) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
@@ -121,6 +122,10 @@ const layer = Layer.effect(
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      return yield* selectTransient(session)
+    })
+
+    const selectTransient = Effect.fn("SessionContext.selectTransient")(function* (session: SessionSchema.Info) {
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
 
@@ -137,7 +142,7 @@ const layer = Layer.effect(
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
           mcp: mcpInstructions.load(permissions),
-          entries: entries.load(sessionID),
+          entries: entries.load(session.id),
         },
         { concurrency: "unbounded" },
       )
@@ -178,7 +183,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load, resolveModel, selectTitle, request })
+    return Service.of({ select, selectTransient, load, resolveModel, selectTitle, request })
   }),
 )
 

@@ -34,6 +34,7 @@ export interface Editor {
 
 type Data = {
   tools: Map<string, Tool.Info & { readonly id: string }>
+  origins: Map<string, string | undefined>
   namespaces: Map<string, Tool.Namespace>
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
@@ -50,6 +51,7 @@ export interface NormalizedResult extends Tool.Result {
 
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly identities?: ReadonlyMap<string, { readonly toolID: string; readonly builtin: boolean }>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
@@ -160,10 +162,11 @@ const layer = Layer.effect(
       name: "tool",
       initial: () => ({
         tools: new Map(),
+        origins: new Map(),
         namespaces: new Map(),
         errors: [],
       }),
-      editor: (editor) => ({
+      editor: (editor, producer) => ({
         list: () => Array.from(editor.tools.values()),
         get: (id) => editor.tools.get(id),
         namespace: (namespace) => {
@@ -182,6 +185,7 @@ const layer = Layer.effect(
           }
           const id = effectiveName(tool)
           editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
+          editor.origins.set(id, producer())
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
@@ -201,6 +205,7 @@ const layer = Layer.effect(
         },
         remove: (id) => {
           editor.tools.delete(id)
+          editor.origins.delete(id)
         },
       }),
       notify: (value) => {
@@ -260,6 +265,13 @@ const layer = Layer.effect(
                 .map(([, tool]) => definition(tool)),
               ...(codeModeTool ? [definition(codeModeTool)] : []),
             ],
+            identities: new Map(
+              Array.from(
+                direct,
+                ([name]) =>
+                  [name, { toolID: name, builtin: data.origins.get(name) === `opencode.tool.${name}` }] as const,
+              ),
+            ),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
                 sessionID: input.sessionID,
