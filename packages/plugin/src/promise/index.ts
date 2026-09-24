@@ -1,6 +1,7 @@
 export type { PluginOptions } from "../options.js"
 export type { StorageEntry, StorageScanOptions, StorageScanResult } from "../storage.js"
 export * as Plugin from "./plugin.js"
+export { Effect, Schema } from "effect"
 
 export { Agent } from "@opencode/schema/agent"
 export { Command } from "@opencode/schema/command"
