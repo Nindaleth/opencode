@@ -197,6 +197,180 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
+  productionIt.live("routes new children while respecting explicit models and resumed sessions", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({
+                plugins: [
+                  {
+                    package: "subagent-router",
+                    options: {
+                      rules: [
+                        { subagent: "reviewer", parentModel: "test/parent", model: "test/override", variant: "fast" },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            ),
+          )
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call" as const,
+                id,
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "review", prompt: "review this", ...input },
+              },
+            })
+          const routed = yield* call("call-routed", { model: "", sessionID: "" })
+          expect(routed.status).toBe("completed")
+          const child = yield* sessions.get(outputSessionID(routed.metadata))
+          expect(child.model).toEqual(overrideModel)
+
+          const explicit = yield* call("call-explicit", { model: "test/override" })
+          expect(explicit).toMatchObject({ status: "completed" })
+          expect((yield* sessions.get(outputSessionID(explicit.metadata))).model).toEqual({
+            id: overrideModel.id,
+            providerID: overrideModel.providerID,
+            variant: Model.VariantID.make("default"),
+          })
+
+          const resumed = yield* call("call-resumed", { sessionID: child.id, model: "" })
+          expect(outputSessionID(resumed.metadata)).toBe(child.id)
+          expect((yield* sessions.get(child.id)).model).toEqual(overrideModel)
+
+          const fallback = yield* call("call-unmatched", { agent: "fallback" })
+          expect((yield* sessions.get(outputSessionID(fallback.metadata))).model).toMatchObject(parentModel)
+        }),
+      ),
+    ),
+  )
+
+  productionIt.live("rejects unavailable routed targets before creating a child", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({
+                plugins: [
+                  {
+                    package: "subagent-router",
+                    options: {
+                      rules: [{ subagent: "reviewer", parentModel: "test/*", model: "test/missing" }],
+                    },
+                  },
+                ],
+              }),
+            ),
+          )
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-routed-missing",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "review", prompt: "review this" },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: 'Model "test/missing" is not available. Use the models tool to see what is available.',
+            },
+          })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(0)
+        }),
+      ),
+    ),
+  )
+
+  productionIt.live("omits unavailable reasoning variants from routed targets", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({
+                plugins: [
+                  {
+                    package: "subagent-router",
+                    options: {
+                      rules: [
+                        { subagent: "reviewer", parentModel: "test/*", model: "test/override", variant: "missing" },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            ),
+          )
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-routed-variant",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "review", prompt: "review this" },
+            },
+          })
+          expect(result.status).toBe("completed")
+          expect((yield* sessions.get(outputSessionID(result.metadata))).model).toEqual({
+            id: overrideModel.id,
+            providerID: overrideModel.providerID,
+            variant: Model.VariantID.make("default"),
+          })
+        }),
+      ),
+    ),
+  )
+
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

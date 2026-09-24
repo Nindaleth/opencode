@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Event } from "@opencode/schema/config"
 import { Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -11,6 +12,12 @@ import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Model } from "@opencode/core/model"
+import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
+import { Agent } from "@opencode/core/agent"
+import { Tool } from "@opencode/schema/tool"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Database } from "../../src/database/database"
@@ -69,14 +76,166 @@ const instances = Layer.effect(
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-    LocationServiceMap.node.replace(instances),
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, Session.node, LocationServiceMap.node]),
+    [Global.node.replace(tempGlobalLayer), offlineModels, LocationServiceMap.node.replace(instances)],
+  ),
 )
 
 describe("PluginSupervisor", () => {
+  it.live("activates a configured router as a builtin without npm resolution", () =>
+    Effect.gen(function* () {
+      source.operations = [
+        {
+          type: "add",
+          target: "subagent-router",
+          options: { rules: [{ subagent: "explore", parentModel: "test/*", model: "test/child" }] },
+        },
+      ]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const inventory = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* plugins.list()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(inventory.filter((item) => item.id === "subagent-router")).toEqual([
+        {
+          id: Plugin.ID.make("subagent-router"),
+          source: { type: "builtin" },
+          state: { status: "active" },
+          features: { server: true },
+        },
+      ])
+      source.operations = []
+    }),
+  )
+
+  it.live("orders router hooks with adjacent plugins and replaces or removes them on reload", () =>
+    Effect.gen(function* () {
+      const router = (model: string): ConfigPluginSource.Operation => ({
+        type: "add",
+        target: "subagent-router",
+        options: { rules: [{ subagent: "explore", parentModel: "test/*", model }] },
+      })
+      source.operations = [router("test/first")]
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(
+        define({
+          id: "earlier-route",
+          effect: (ctx) =>
+            ctx.tool
+              .hook("execute.before", (event) =>
+                Effect.sync(() => {
+                  if (event.tool === "subagent" && typeof event.input === "object" && event.input !== null)
+                    event.input = { ...event.input, marker: "before-router" }
+                }),
+              )
+              .pipe(Effect.asVoid),
+        }),
+      )
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const hooks = yield* PluginHooks.Service
+        const bus = yield* Bus.Service
+        const sessions = yield* Session.Service
+        yield* plugins.awaitActivation
+        const parent = yield* sessions.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
+          model: Model.Ref.parse("test/parent"),
+        })
+        const invoke = () =>
+          hooks.trigger("tool", "execute.before", {
+            tool: "subagent",
+            input: { agent: "explore" },
+            sessionID: parent.id,
+            agent: Agent.ID.make("build"),
+            messageID: SessionMessage.ID.make("msg_route"),
+            id: Tool.CallID.make("call_route"),
+          })
+        expect((yield* invoke()).input).toEqual({ agent: "explore", marker: "before-router", model: "test/first" })
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({ id: "subagent-router", source: { type: "builtin" }, state: { status: "active" } }),
+        )
+        source.operations = [router("test/second")]
+        yield* bus.publish(Event.Updated, {})
+        yield* Effect.sleep("150 millis")
+        yield* plugins.awaitActivation
+        expect((yield* plugins.list()).filter((item) => item.id === "subagent-router")).toHaveLength(1)
+        expect((yield* invoke()).input).toEqual({ agent: "explore", marker: "before-router", model: "test/second" })
+
+        source.operations = []
+        yield* bus.publish(Event.Updated, {})
+        yield* Effect.sleep("150 millis")
+        yield* plugins.awaitActivation
+        expect((yield* plugins.list()).some((item) => item.id === "subagent-router")).toBeFalse()
+        expect((yield* invoke()).input).toEqual({ agent: "explore", marker: "before-router" })
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      source.operations = []
+    }),
+  )
+
+  it.live("reports invalid router rules while continuing healthy plugin activation", () =>
+    Effect.gen(function* () {
+      source.operations = [{ type: "add", target: "subagent-router", options: { rules: [{ model: "bad" }] } }]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const inventory = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* plugins.list()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(inventory.find((item) => item.id === "subagent-router")).toMatchObject({
+        source: { type: "builtin" },
+        state: { status: "failed", error: expect.stringContaining("subagent") },
+      })
+      expect(
+        inventory.some((item) => item.id === "opencode.tool.subagent" && item.state.status === "active"),
+      ).toBeTrue()
+      source.operations = []
+    }),
+  )
+
+  it.live("uses the last configured router options when the target appears twice", () =>
+    Effect.gen(function* () {
+      source.operations = [
+        {
+          type: "add",
+          target: "subagent-router",
+          options: { rules: [{ subagent: "explore", parentModel: "test/*", model: "test/child" }] },
+        },
+        {
+          type: "add",
+          target: "subagent-router",
+          options: { rules: [{ subagent: "explore", parentModel: "test/*", model: "bad" }] },
+        },
+      ]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const inventory = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* plugins.list()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(inventory.find((item) => item.id === "subagent-router")?.state.status).toBe("failed")
+      source.operations = []
+    }),
+  )
+
   it.live("reports a duplicate plugin ID as a failure without dropping the generation", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
