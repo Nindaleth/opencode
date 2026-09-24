@@ -7,6 +7,8 @@ import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
+import { useData } from "../../../context/data"
+import { Locale } from "../../../util/locale"
 import { ComposerContext, type ComposerTab } from "./context"
 
 export type ComposerProps = {
@@ -20,6 +22,8 @@ export type ComposerProps = {
 
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
+  const data = useData()
+  const session = createMemo(() => data.session.get(props.sessionID))
 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, ComposerTab>,
@@ -124,6 +128,14 @@ export function Composer(props: ComposerProps) {
                 esc
               </text>
             </box>
+            <Show when={session()?.parentID && session()?.model?.variant}>
+              {(variant) => (
+                <text paddingLeft={1} fg={theme.text.muted}>
+                  {Locale.titlecase(session()?.agent ?? "Subagent")} ·{" "}
+                  <span style={{ fg: theme.text.base }}>{variant()}</span>
+                </text>
+              )}
+            </Show>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
             <Show when={props.terminals}>
