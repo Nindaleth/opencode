@@ -305,6 +305,8 @@ import type {
   VcsDiffOutput,
   DebugHeapDumpInput,
   DebugHeapDumpOutput,
+  DebugPromptInput,
+  DebugPromptOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -2606,6 +2608,23 @@ export function make(options: ClientOptions) {
             query: { directory: input?.["directory"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 500],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      prompt: (input?: DebugPromptInput, requestOptions?: RequestOptions) =>
+        request<DebugPromptOutput>(
+          {
+            method: "GET",
+            path: `/api/debug/prompt`,
+            query: {
+              location: input?.["location"],
+              provider: input?.["provider"],
+              model: input?.["model"],
+              agent: input?.["agent"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,

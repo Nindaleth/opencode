@@ -4821,6 +4821,19 @@ export type DebugHeapDumpOutput = {
   memory: { rss: number; heapTotal: number; heapUsed: number; external: number; arrayBuffers: number }
 }
 
+export type DebugPromptInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly provider?: string | undefined
+  readonly model?: string | undefined
+  readonly agent?: string | undefined
+}
+
+export type DebugPromptOutput = {
+  selection: { provider: string; model: string; agent: string }
+  system: Array<string>
+  tools: Array<{ name: string; description: string }>
+}
+
 export type DebugLocationListOutput = Array<LocationPublicRef>
 
 export type DebugLocationEvictInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

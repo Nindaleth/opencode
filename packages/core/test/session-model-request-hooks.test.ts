@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ToolDefinition } from "@opencode/ai/effect"
+import { SystemPart, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -41,6 +41,71 @@ const transport = SessionModelTransport.Service.of({
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
+  it.effect("edits only surviving advertised tool definitions after context hooks across request kinds", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const seen: string[] = []
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          delete event.tools.removed
+          event.tools.alias = event.tools.read!
+          delete event.tools.read
+        }),
+      )
+      yield* hooks.register("tool", "definition", (event) =>
+        Effect.sync(() => {
+          seen.push(`${event.toolID}:${event.builtin}`)
+          if (event.builtin) event.description = "overridden"
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const tools: SessionModelRequest.Input["tools"] = {
+        definitions: [
+          { type: "tool", name: "read", description: "original", inputSchema: {} },
+          { type: "tool", name: "removed", description: "original", inputSchema: {} },
+          { type: "tool", name: "custom", description: "custom", inputSchema: {} },
+        ],
+        identities: new Map([
+          ["read", { toolID: "read", builtin: true }],
+          ["removed", { toolID: "removed", builtin: true }],
+          ["custom", { toolID: "read", builtin: false }],
+        ]),
+        execute: () => Effect.die("unused"),
+      }
+      for (const kind of ["primary", "compaction", "generate"] as const) {
+        const prepared = yield* requests[kind]({
+          session,
+          agent: Agent.ID.make("build"),
+          model,
+          tools,
+          system: [SystemPart.make("base")],
+          messages: [],
+        })
+        expect(prepared.request.tools.map((tool) => [tool.name, tool.description])).toEqual(
+          kind === "primary"
+            ? [
+                ["custom", "custom"],
+                ["alias", "overridden"],
+              ]
+            : [
+                ["read", "overridden"],
+                ["removed", "overridden"],
+                ["custom", "custom"],
+              ],
+        )
+      }
+      expect(seen).toEqual([
+        "read:false",
+        "read:true",
+        "read:true",
+        "removed:true",
+        "read:false",
+        "read:true",
+        "removed:true",
+        "read:false",
+      ])
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
   it.effect("tags every Session request kind on http.request and http.response", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
@@ -146,14 +211,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       }
 
       const required = yield* Effect.forEach([1, 2], () =>
-        requests
-          .primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools })
-          .pipe(
-            Effect.map((prepared) => {
-              const tool = prepared.request.tools[0]
-              return tool?.type === "tool" ? tool.inputSchema.required : undefined
-            }),
-          ),
+        requests.primary({ session, agent: Agent.ID.make("build"), model, system: [], messages: [], tools }).pipe(
+          Effect.map((prepared) => {
+            const tool = prepared.request.tools[0]
+            return tool?.type === "tool" ? tool.inputSchema.required : undefined
+          }),
+        ),
       )
 
       expect(required).toEqual([

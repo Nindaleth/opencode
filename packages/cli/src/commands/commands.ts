@@ -126,6 +126,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
       commands: [
+        Spec.make("prompt", {
+          description: "Preview the effective initial system prompt and tool descriptions",
+          globalFlags: ServerFlags,
+          params: {
+            provider: Flag.String("provider").pipe(Flag.withDescription("Provider ID"), Flag.optional),
+            model: Flag.String("model").pipe(Flag.withDescription("Model ID"), Flag.optional),
+            agent: Flag.String("agent").pipe(Flag.withDescription("Agent ID"), Flag.optional),
+          },
+        }),
         Spec.make("agents", { description: "List all agents", globalFlags: ServerFlags }),
         Spec.make("config", { description: "List configuration sources", globalFlags: ServerFlags }),
         Spec.make("heap-dump", {

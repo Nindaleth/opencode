@@ -19,6 +19,12 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
     id: Tool.CallID.make("call_repair"),
   }
   const events: ToolHooks = {
+    definition: {
+      model: { providerID: "test", id: "test" } as ToolHooks["definition"]["model"],
+      toolID: "test",
+      builtin: false,
+      description: "unused",
+    },
     "execute.before": event,
     "execute.after": { ...event, status: "error", error: new Tool.Error({ message: "unused" }) },
   }

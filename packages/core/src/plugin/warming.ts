@@ -132,6 +132,7 @@ export const Plugin = define({
 
     const hook = (tracked: boolean) => (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
+        if (event.preview) return
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
         if (session.parentID) return
         if (tracked && !running.has(event.sessionID)) running.set(event.sessionID, yield* Deferred.make<void>())

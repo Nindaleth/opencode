@@ -38,6 +38,7 @@ type Data = {
   tools: Map<string, Tool.Info & { readonly id: string }>
   // Converted once at registration; schemas cannot change without re-registering the tool.
   definitions: Map<string, ToolDefinition>
+  origins: Map<string, string | undefined>
   namespaces: Map<string, Tool.Namespace>
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
@@ -68,6 +69,7 @@ export interface NormalizedResult extends Tool.Result {
 
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  readonly identities?: ReadonlyMap<string, { readonly toolID: string; readonly builtin: boolean }>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
@@ -198,10 +200,11 @@ const layer = Layer.effect(
       initial: () => ({
         tools: new Map(),
         definitions: new Map(),
+        origins: new Map(),
         namespaces: new Map(),
         errors: [],
       }),
-      editor: (editor) => ({
+      editor: (editor, producer) => ({
         list: () => Array.from(editor.tools.values()),
         get: (id) => editor.tools.get(id),
         namespace: (namespace) => {
@@ -214,7 +217,8 @@ const layer = Layer.effect(
         },
         add: (tool) => {
           const id = effectiveName(tool)
-          commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } })
+          if (commit(editor, id, { ...tool, id, options: tool.options && { ...tool.options } }))
+            editor.origins.set(id, producer())
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
@@ -230,6 +234,7 @@ const layer = Layer.effect(
         remove: (id) => {
           editor.tools.delete(id)
           editor.definitions.delete(id)
+          editor.origins.delete(id)
         },
       }),
       notify: (value) => {
@@ -300,6 +305,13 @@ const layer = Layer.effect(
                 .map(([name]) => data.definitions.get(name)!),
               ...(codeModeDefinition ? [codeModeDefinition] : []),
             ],
+            identities: new Map(
+              Array.from(
+                direct,
+                ([name]) =>
+                  [name, { toolID: name, builtin: data.origins.get(name) === `opencode.tool.${name}` }] as const,
+              ),
+            ),
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
               const context: Tool.Context = {
                 sessionID: input.sessionID,
@@ -381,6 +393,7 @@ function commit(editor: Data, id: string, input: Tool.Info & { readonly id: stri
   }
   editor.tools.set(id, tool)
   editor.definitions.set(id, registered.success)
+  return true
 }
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {

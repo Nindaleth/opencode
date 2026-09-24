@@ -686,6 +686,7 @@ const toolError = (error: unknown) =>
 const toolHook: {
   readonly [Name in keyof ToolHooks]: (run: () => Promise<void>) => Effect.Effect<void, ToolFailures[Name]>
 } = {
+  definition: (run) => Effect.promise(run),
   "execute.before": (run) => Effect.tryPromise({ try: run, catch: toolError }),
   "execute.after": (run) => Effect.promise(run),
 }
