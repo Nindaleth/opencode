@@ -56,6 +56,7 @@ const Handlers = Runtime.handlers(Commands, {
     switch: () => import("./commands/handlers/auth/switch"),
   },
   debug: {
+    prompt: () => import("./commands/handlers/debug/prompt"),
     agents: () => import("./commands/handlers/debug/agents"),
     config: () => import("./commands/handlers/debug/config"),
     "heap-dump": () => import("./commands/handlers/debug/heap-dump"),

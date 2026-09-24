@@ -307,6 +307,8 @@ import type {
   VcsDiffOutput,
   DebugHeapDumpInput,
   DebugHeapDumpOutput,
+  DebugPromptInput,
+  DebugPromptOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1926,6 +1928,18 @@ const EndpointDebugHeapDump = (raw: RawClient["server.debug"]) => (input?: Debug
     raw["debug.heapDump"]({ query: { directory: input?.["directory"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointDebugPrompt = (raw: RawClient["server.debug"]) => (input?: DebugPromptInput) =>
+  preserveEffect<DebugPromptOutput>()(
+    raw["debug.prompt"]({
+      query: {
+        location: input?.["location"],
+        provider: input?.["provider"],
+        model: input?.["model"],
+        agent: input?.["agent"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointDebugLocationList = (raw: RawClient["server.debug"]) => () =>
   preserveEffect<DebugLocationListOutput>()(raw["debug.location"]({}).pipe(Effect.mapError(mapClientError)))
 
@@ -1936,6 +1950,7 @@ const EndpointDebugLocationEvict = (raw: RawClient["server.debug"]) => (input?: 
 
 const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   heapDump: EndpointDebugHeapDump(raw),
+  prompt: EndpointDebugPrompt(raw),
   location: { list: EndpointDebugLocationList(raw), evict: EndpointDebugLocationEvict(raw) },
 })
 

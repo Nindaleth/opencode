@@ -38,7 +38,7 @@ test("exposes every standard HTTP API group", () => {
     "migration",
     "usage",
   ])
-  expect(Object.keys(client.debug)).toEqual(["heapDump", "location"])
+  expect(Object.keys(client.debug)).toEqual(["heapDump", "prompt", "location"])
   expect(Object.keys(client.debug.location)).toEqual(["list", "evict"])
   expect(Object.keys(client.message)).toEqual(["list"])
   expect(Object.keys(client.integration)).toEqual(["list", "get", "connect", "oauth", "command", "wellknown"])

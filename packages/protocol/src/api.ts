@@ -19,7 +19,7 @@ import type { Definition } from "@opencode/schema/event"
 import { AgentGroup } from "./groups/agent.js"
 import { PluginGroup } from "./groups/plugin.js"
 import { ServerGroup } from "./groups/server.js"
-import { DebugGroup } from "./groups/debug.js"
+import { makeDebugGroup } from "./groups/debug.js"
 import { makePtyGroup } from "./groups/pty.js"
 import { ShellGroup } from "./groups/shell.js"
 import { ReferenceGroup } from "./groups/reference.js"
@@ -95,7 +95,7 @@ type ApiGroups<
   Event extends HttpApiGroup.Constraint,
 > =
   | typeof ServerGroup
-  | typeof DebugGroup
+  | ReturnType<typeof makeDebugGroup<LocationId, LocationService>>
   | typeof MigrationGroup
   | typeof WorktreeGroup
   | typeof GenerateGroup
@@ -192,7 +192,7 @@ const makeApiFromGroup = <
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup)
     .add(VcsGroup.middleware(locationMiddleware))
-    .add(DebugGroup)
+    .add(makeDebugGroup(locationMiddleware))
     .add(MigrationGroup)
     .add(WebSearchGroup.middleware(locationMiddleware))
     .add(UsageGroup.middleware(locationMiddleware))

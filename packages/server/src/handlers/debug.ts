@@ -1,4 +1,5 @@
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { SessionPromptPreview } from "@opencode/core/session/prompt-preview"
 import { InvalidRequestError, UnknownError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { HeapSnapshot } from "@opencode/util/heap-snapshot"
@@ -12,6 +13,15 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
   Effect.gen(function* () {
     const global = yield* Global.Service
     return handlers
+      .handle(
+        "debug.prompt",
+        Effect.fn(function* (ctx) {
+          const preview = yield* SessionPromptPreview.Service
+          return yield* preview
+            .prepare(ctx.query)
+            .pipe(Effect.mapError((error) => new InvalidRequestError({ message: error.message })))
+        }),
+      )
       .handle(
         "debug.heapDump",
         Effect.fn("server.debug.heapDump")(function* (ctx) {

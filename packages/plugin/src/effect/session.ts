@@ -27,6 +27,7 @@ export type SessionRequestMessage = Message & { readonly metadata?: Record<strin
 
 export interface SessionRequest {
   readonly sessionID: Session.ID
+  readonly preview?: boolean
   readonly model: Model.Ref
   /**
    * The instructions part keeps each source's text in `metadata.experimental.instructions` as `{ key, text }`. It is
