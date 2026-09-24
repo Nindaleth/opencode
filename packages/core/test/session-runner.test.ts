@@ -37,6 +37,8 @@ import { Form } from "@opencode/core/form"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Snapshot } from "@opencode/core/snapshot"
+import { Shell } from "@opencode/schema/shell"
+import { ShellResult } from "@opencode/core/shell/result"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -2078,6 +2080,76 @@ describe("SessionRunnerLLM", () => {
         { role: "user" },
       ],
     })
+  })
+
+  scenario("preserves reasoning variant across a user shell command", function* (s) {
+    // A user shell completion must not reset the next model step's reasoning variant.
+    s.currentModel = LanguageModel.make({
+      id: "claude-opus-5",
+      provider: "anthropic",
+      route: AnthropicMessages.route,
+      defaults: { providerOptions: { effort: "high" } },
+    })
+    const high = Model.Ref.make({
+      id: ID.make("claude-opus-5"),
+      providerID: Provider.ID.anthropic,
+      variant: Model.VariantID.make("high"),
+    })
+    yield* s.session.switchModel({ sessionID, model: high })
+    yield* s.llm.push(TestLLM.text("First answer", "text-shell-first"))
+    yield* s.runPrompt("First")
+
+    const shell = Shell.Info.make({
+      id: Shell.ID.make("sh_variant"),
+      status: "running",
+      command: "printf shell-output",
+      cwd: AbsolutePath.make("/project"),
+      shell: "/bin/sh",
+      file: "/tmp/sh_variant.out",
+      metadata: { background: true },
+      time: { started: 0 },
+    })
+    yield* s.bus.publish(SessionEvent.Shell.Started, { sessionID, shell })
+    yield* s.bus.publish(SessionEvent.Shell.Ended, {
+      sessionID,
+      shell: { ...shell, status: "exited", exit: 0, time: { started: 0, completed: 1 } },
+      output: { output: "shell-output", cursor: 12, size: 12, truncated: false },
+    })
+    const completion = ShellResult.userNotification({
+      info: { ...shell, status: "exited", exit: 0, time: { started: 0, completed: 1 } },
+      capture: { output: "shell-output", truncated: false },
+    })
+    yield* s.session.synthetic({ sessionID, ...completion, resume: false })
+    yield* replaySessionProjection(sessionID)
+    expect((yield* s.session.get(sessionID)).model).toEqual(high)
+
+    yield* s.llm.push(TestLLM.text("Second answer", "text-shell-second"))
+    yield* s.runPrompt("Second")
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1]?.model.defaults?.providerOptions).toMatchObject({ effort: "high" })
+    expect((yield* compileRequest(s.requests[1]!)).body).toMatchObject({ output_config: { effort: "high" } })
+    expect((yield* s.session.get(sessionID)).model).toEqual(high)
+    expect(s.requests[1]?.messages.filter((message) => message.role === "user")).toMatchObject([
+      Message.user("First"),
+      Message.user(completion.text),
+      Message.user("Second"),
+    ])
+    expect(
+      (yield* s.messages).filter((message) => message.type === "assistant").map((message) => message.model),
+    ).toEqual([high, high])
+
+    const defaultVariant = Model.Ref.make({ ...high, variant: Model.VariantID.make("default") })
+    yield* s.session.switchModel({ sessionID, model: defaultVariant })
+    s.currentModel = LanguageModel.update(s.currentModel, { defaults: { providerOptions: { effort: "low" } } })
+    yield* s.llm.push(TestLLM.text("Third answer", "text-shell-third"))
+    yield* s.runPrompt("Third")
+    expect((yield* s.session.get(sessionID)).model).toEqual(defaultVariant)
+    expect(s.requests[2]?.model.defaults?.providerOptions).toMatchObject({ effort: "low" })
+    expect((yield* compileRequest(s.requests[2]!)).body).toMatchObject({ output_config: { effort: "low" } })
+    expect(
+      (yield* s.session.messages({ sessionID, order: "asc" })).filter((message) => message.type === "assistant").at(-1)
+        ?.model,
+    ).toEqual(defaultVariant)
   })
 
   scenario("preserves instruction values while a source is temporarily unavailable", function* (s) {

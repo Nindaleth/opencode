@@ -6,6 +6,8 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -108,7 +110,14 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
 describe("Session.shell", () => {
   it.live("runs shells concurrently with an active model and waits for each shell's own completion", () =>
     Effect.gen(function* () {
+      // Concurrent shell completions must not reset the selected reasoning variant.
       const fixture = yield* setup
+      const selected = Model.Ref.make({
+        providerID: Provider.ID.make("test"),
+        id: Model.ID.make("test-model"),
+        variant: Model.VariantID.make("high"),
+      })
+      yield* fixture.session.switchModel({ sessionID: fixture.created.id, model: selected })
       const model = yield* fixture.execution.resume(fixture.created.id).pipe(Effect.forkScoped)
       yield* Deferred.await(fixture.control.started).pipe(Effect.timeout("5 seconds"))
       const first = yield* launch(fixture, "first")
@@ -117,13 +126,16 @@ describe("Session.shell", () => {
       expect(yield* fixture.execution.active).toContain(fixture.created.id)
       expect(first.caller.pollUnsafe()).toBeUndefined()
       expect(second.caller.pollUnsafe()).toBeUndefined()
-      expect(yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })).toMatchObject([
-        { type: "shell", shellID: first.shellID, status: "running", metadata: { background: true } },
-        { type: "shell", shellID: second.shellID, status: "running", metadata: { background: true } },
-      ])
+      expect((yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })).slice(1)).toMatchObject(
+        [
+          { type: "shell", shellID: first.shellID, status: "running", metadata: { background: true } },
+          { type: "shell", shellID: second.shellID, status: "running", metadata: { background: true } },
+        ],
+      )
 
       yield* second.release
       yield* Fiber.join(second.caller).pipe(Effect.timeout("5 seconds"))
+      expect((yield* fixture.session.get(fixture.created.id)).model).toEqual(selected)
       expect(first.caller.pollUnsafe()).toBeUndefined()
       expect(yield* fixture.session.inbox(fixture.created.id)).toMatchObject([
         {
@@ -136,6 +148,12 @@ describe("Session.shell", () => {
       ])
       yield* first.release
       yield* Fiber.join(first.caller).pipe(Effect.timeout("5 seconds"))
+      expect((yield* fixture.session.get(fixture.created.id)).model).toEqual(selected)
+      expect(
+        (yield* log(fixture.session, fixture.created.id).pipe(Stream.runCollect)).filter(
+          (event) => event.type === "session.model.selected",
+        ),
+      ).toHaveLength(1)
       expect(
         (yield* fixture.session.inbox(fixture.created.id))
           .filter((item) => item.type === "synthetic")
@@ -219,33 +237,44 @@ describe("Session.shell", () => {
   )
 
   for (const exit of [0, 7]) {
-    it.live(`records output and admits one completion without waking the model after exit ${exit}`, () =>
+    it.live(`shell exit ${exit} does not reset the selected reasoning variant`, () =>
       Effect.gen(function* () {
+        // A user shell exit must not reset the selected reasoning variant.
         const fixture = yield* setup
+        const selected = Model.Ref.make({
+          providerID: Provider.ID.make("test"),
+          id: Model.ID.make("test-model"),
+          variant: Model.VariantID.make("high"),
+        })
+        yield* fixture.session.switchModel({ sessionID: fixture.created.id, model: selected })
         const command =
           process.platform === "win32"
             ? `Write-Output 'user output'; [Console]::Error.WriteLine('user error'); exit ${exit}`
             : `printf 'user output\\n'; printf 'user error\\n' >&2; exit ${exit}`
         yield* fixture.session.shell({ sessionID: fixture.created.id, command })
+        expect((yield* fixture.session.get(fixture.created.id)).model).toEqual(selected)
 
         const events = yield* log(fixture.session, fixture.created.id).pipe(Stream.runCollect)
         expect(events.map((event) => event.type)).toEqual([
           "session.created",
+          "session.model.selected",
           "session.shell.started",
           "session.shell.ended",
           "session.inbox.enqueued",
         ])
-        expect(events[1]).toMatchObject({ data: { shell: { metadata: { background: true } } } })
-        const messages = yield* fixture.session.messages({ sessionID: fixture.created.id })
-        expect(messages).toHaveLength(1)
-        expect(messages[0]).toMatchObject({
+        expect(events[2]).toMatchObject({ data: { shell: { metadata: { background: true } } } })
+        const messages = yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })
+        expect(messages).toHaveLength(2)
+        expect(messages[1]).not.toHaveProperty("model")
+        expect(messages[1]).not.toHaveProperty("variant")
+        expect(messages[1]).toMatchObject({
           type: "shell",
           command,
           status: "exited",
           exit,
           metadata: { background: true },
         })
-        const message = messages[0]
+        const message = messages[1]
         if (message?.type !== "shell") return yield* Effect.die("Missing shell projection")
         expect(message.time.completed).toBeDefined()
         expect(message.output?.output).toContain("user output")
