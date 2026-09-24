@@ -12,6 +12,7 @@ import { PluginInternal } from "./internal.js"
 import { PluginModule } from "./module.js"
 import { SdkPlugins } from "./sdk.js"
 import { PluginUpdate } from "./update.js"
+import { SubagentRouterPlugin } from "./subagent-router.js"
 import { Watcher } from "../filesystem/watcher.js"
 
 const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
@@ -46,20 +47,30 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       operation.target === "*" ||
       operation.target.endsWith(".*") ||
       operation.target.startsWith("opencode.")
-    if (selectsPlugins) {
+    if (selectsPlugins && operation.target !== "subagent-router") {
       matched.forEach((plugin) => enabled.add(plugin.id))
       continue
     }
 
-    const plugin = yield* modules.load(operation, { install }).pipe(
-      Effect.catchCause((cause) => {
-        const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-        const error = Cause.squash(cause)
-        return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
-          Effect.as({ error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load", ref }),
-        )
-      }),
-    )
+    const plugin =
+      operation.target === "subagent-router"
+        ? {
+            ...SubagentRouterPlugin.configured(operation.options),
+            revision: JSON.stringify(operation.options),
+            source: { type: "builtin" as const },
+          }
+        : yield* modules.load(operation, { install }).pipe(
+            Effect.catchCause((cause) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              const error = Cause.squash(cause)
+              return Effect.logWarning("failed to load plugin", { target: operation.target, ref, cause }).pipe(
+                Effect.as({
+                  error: error instanceof PluginModule.LoadError ? error.message : "Plugin failed to load",
+                  ref,
+                }),
+              )
+            }),
+          )
     if ("blocked" in plugin) {
       const previous = packages.get(operation.target)
       if (previous) enabled.delete(previous.id)
