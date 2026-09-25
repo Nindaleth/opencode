@@ -145,12 +145,12 @@ test("keeps consecutive close controls fixed across overflow window changes", as
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Third"))
-    await app.mockMouse.moveTo(12, 1)
-    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[12] === "✕")
+    await app.mockMouse.moveTo(8, 1)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[9] === "✕")
 
-    await app.mockMouse.click(12, 1)
-    await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[1] ?? "")[12] === "✕")
-    await app.mockMouse.click(12, 1)
+    await app.mockMouse.click(9, 1)
+    await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[1] ?? "")[9] === "✕")
+    await app.mockMouse.click(9, 1)
 
     expect(closed).toEqual(["third", "fourth"])
   } finally {
@@ -193,28 +193,28 @@ test("reflows held tabs when the pointer leaves the strip", async () => {
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 60, height: 4 },
+    { width: 80, height: 4 },
   )
 
   try {
     app.renderer.start()
     await app.waitForFrame((frame) => frame.includes("Fourth"))
-    await app.mockMouse.moveTo(28, 1)
-    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[28] === "✕")
-    await app.mockMouse.click(28, 1)
+    await app.mockMouse.moveTo(5, 1)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[33] === "✕")
+    await app.mockMouse.click(33, 1)
     await app.waitForFrame(
-      (frame) => !frame.includes("First") && items().length === 3 && Array.from(frame.split("\n")[1] ?? "")[28] === "✕",
+      (frame) => !frame.includes("First") && items().length === 3 && Array.from(frame.split("\n")[1] ?? "")[33] === "✕",
     )
 
     await app.renderOnce()
     const held = app.captureCharFrame().split("\n")[1] ?? ""
-    expect(held.indexOf("✕")).toBe(28)
-    expect(held.indexOf("Third")).toBe(33)
+    expect(held.indexOf("✕")).toBe(33)
+    expect(held.indexOf("Third")).toBe(38)
     await app.mockMouse.moveTo(0, 3)
-    await app.waitForFrame((frame) => (frame.split("\n")[1] ?? "").indexOf("Third") < held.indexOf("Third"))
-    await app.mockMouse.moveTo(20, 1)
-    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[26] === "✕")
-    expect(Array.from(app.captureCharFrame().split("\n")[1] ?? "")[28]).not.toBe("✕")
+    await app.waitForFrame((frame) => (frame.split("\n")[1] ?? "").indexOf("Third") > held.indexOf("Third"))
+    await app.mockMouse.moveTo(40, 1)
+    await app.waitForFrame((frame) => Array.from(frame.split("\n")[1] ?? "")[56] === "✕")
+    expect(Array.from(app.captureCharFrame().split("\n")[1] ?? "")[33]).not.toBe("✕")
   } finally {
     app.renderer.destroy()
   }

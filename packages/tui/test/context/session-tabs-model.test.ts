@@ -251,19 +251,19 @@ describe("session tabs", () => {
 
   test("expands the active tab and keeps inactive widths equal", () => {
     const tabs = ["a", "b", "c", "d", "e", "f", "g"].map((sessionID) => ({ sessionID }))
-    const layout = adaptiveSessionTabLayout(tabs, "d", 76)
+    const layout = adaptiveSessionTabLayout(tabs, "d", 83)
 
-    expect(layout).toMatchObject({ before: 0, after: 0, start: 0, total: 76 })
-    expect(layout.widths).toEqual([8, 8, 8, 28, 8, 8, 8])
-    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(76)
+    expect(layout).toMatchObject({ before: 0, after: 0, start: 0, total: 83 })
+    expect(layout.widths).toEqual([8, 8, 8, 35, 8, 8, 8])
+    expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(83)
   })
 
   test("reserves an active tab slot for the new session page", () => {
     const tabs = ["a", "b", "c", "d", "new"].map((sessionID) => ({ sessionID }))
-    const layout = adaptiveSessionTabLayout(tabs, "new", 60)
+    const layout = adaptiveSessionTabLayout(tabs, "new", 67)
 
     expect(layout.tabs).toEqual(tabs)
-    expect(layout.widths).toEqual([8, 8, 8, 8, 28])
+    expect(layout.widths).toEqual([8, 8, 8, 8, 35])
     expect(layout.widths.reduce((total, width) => total + width, 0)).toBe(layout.total)
   })
 
@@ -278,41 +278,49 @@ describe("session tabs", () => {
 
   test("only swaps old and new active width inside a sticky window", () => {
     const tabs = ["a", "b", "c", "d", "e", "f", "g"].map((sessionID) => ({ sessionID }))
-    const before = adaptiveSessionTabLayout(tabs, "c", 76)
-    const after = adaptiveSessionTabLayout(tabs, "d", 76, before.start)
+    const before = adaptiveSessionTabLayout(tabs, "c", 83)
+    const after = adaptiveSessionTabLayout(tabs, "d", 83, before.start)
 
     expect(before.start).toBe(after.start)
-    expect(before.widths).toEqual([8, 8, 28, 8, 8, 8, 8])
-    expect(after.widths).toEqual([8, 8, 8, 28, 8, 8, 8])
+    expect(before.widths).toEqual([8, 8, 35, 8, 8, 8, 8])
+    expect(after.widths).toEqual([8, 8, 8, 35, 8, 8, 8])
   })
 
   test("shares roomy width equally without changing widths on selection", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
-    const before = adaptiveSessionTabLayout(tabs, "a", 100)
-    const after = adaptiveSessionTabLayout(tabs, "c", 100, before.start)
+    const before = adaptiveSessionTabLayout(tabs, "a", 108)
+    const after = adaptiveSessionTabLayout(tabs, "c", 108, before.start)
 
-    expect(before.widths).toEqual([34, 33, 33])
+    expect(before.widths).toEqual([36, 36, 36])
     expect(after.widths).toEqual(before.widths)
-    expect(before.total).toBe(100)
+    expect(before.total).toBe(108)
   })
 
   test("caps a single tab instead of stretching it across the terminal", () => {
     const layout = adaptiveSessionTabLayout([{ sessionID: "a" }], "a", 100)
 
-    expect(layout.widths).toEqual([40])
-    expect(layout.total).toBe(40)
+    expect(layout.widths).toEqual([50])
+    expect(layout.total).toBe(50)
   })
 
-  test("keeps the active tab readable at the wider preferred width under pressure", () => {
+  test("shares 230 columns among four and five tabs up to the maximum width", () => {
+    const four = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const five = [...four, { sessionID: "e" }]
+
+    expect(adaptiveSessionTabLayout(four, "c", 230).widths).toEqual([50, 50, 50, 50])
+    expect(adaptiveSessionTabLayout(five, "c", 230).widths).toEqual([46, 46, 46, 46, 46])
+  })
+
+  test("keeps the active tab readable at the preferred width under pressure", () => {
     const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
 
-    expect(adaptiveSessionTabLayout(tabs, "c", 100).widths).toEqual([24, 24, 28, 24])
+    expect(adaptiveSessionTabLayout(tabs, "c", 100).widths).toEqual([21, 21, 37, 21])
   })
 
   test("fills roomy space equally below the maximum width", () => {
     const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
 
-    expect(adaptiveSessionTabLayout(tabs, "b", 120).widths).toEqual([30, 30, 30, 30])
+    expect(adaptiveSessionTabLayout(tabs, "b", 160).widths).toEqual([40, 40, 40, 40])
   })
 
   test("expands only the active tab under compact pressure", () => {
@@ -320,8 +328,8 @@ describe("session tabs", () => {
     const before = adaptiveSessionTabLayout(tabs, "c", 100)
     const after = adaptiveSessionTabLayout(tabs, "d", 100, before.start)
 
-    expect(before.widths).toEqual([18, 18, 28, 18, 18])
-    expect(after.widths).toEqual([18, 18, 18, 28, 18])
+    expect(before.widths).toEqual([16, 16, 36, 16, 16])
+    expect(after.widths).toEqual([16, 16, 16, 36, 16])
   })
 
   test("moves the window only after selection crosses its edge", () => {
