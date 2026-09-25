@@ -10,6 +10,12 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
   const color = RGBA.fromInts(200, 200, 200)
   const subdued = RGBA.fromInts(100, 100, 100)
   const dispatched: string[] = []
+  const session = { id: "session", cost: 0.37, location: { directory: "/workspace" } }
+  const [sessions, setSessions] = createSignal([
+    session,
+    { id: "child", parentID: "session", cost: 0.4 },
+    { id: "grandchild", parentID: "child", cost: 0.65 },
+  ])
   const context = {
     location: { directory: "/workspace" },
     theme: {
@@ -27,8 +33,9 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
       session: {
         family: () => ["session", "child"],
         status: (id: string) => (id === "child" ? "running" : "idle"),
-        get: () => ({ id: "session", location: { directory: "/workspace" } }),
-        cost: () => 1,
+        get: () => session,
+        list: sessions,
+        cost: () => 0.37,
         message: { list: () => [] },
       },
       shell: {
@@ -42,15 +49,19 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
   const app = await testRender(
     () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
     {
-      width: 80,
+      width: 140,
       height: 2,
     },
   )
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("ctrl+j 1 subagent · 1 shell · $1.00")
+    expect(app.captureCharFrame()).toContain("ctrl+j 1 subagent · 1 shell · $1.42 ($0.37 + $1.05 by 2 tasks)")
     expect(app.captureCharFrame()).toContain("ctrl+p commands")
+
+    setSessions([session])
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ctrl+j 1 subagent · 1 shell · $0.37")
 
     await app.mockMouse.moveTo(2, 0)
     const live = app.renderer.root.getChildren()[0]?.getChildren()[0]?.getChildren()[0]
@@ -85,7 +96,8 @@ test("prompt footer can hide details", async () => {
       session: {
         family: () => ["session"],
         status: () => "running",
-        get: () => ({ id: "session", location: { directory: "/workspace" } }),
+        get: () => ({ id: "session", cost: 1, location: { directory: "/workspace" } }),
+        list: () => [{ id: "session", cost: 1 }],
         cost: () => 1,
         message: {
           list: () => [
@@ -109,12 +121,7 @@ test("prompt footer can hide details", async () => {
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-        <PromptFooter
-          context={context}
-          sessionID={sessionID()}
-          mode="normal"
-          showDetails={showDetails()}
-        />
+        <PromptFooter context={context} sessionID={sessionID()} mode="normal" showDetails={showDetails()} />
       </box>
     ),
     {

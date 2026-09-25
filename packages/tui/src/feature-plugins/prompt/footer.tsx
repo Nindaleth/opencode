@@ -1,13 +1,8 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { contextUsage, formatContextUsage } from "../../util/session"
+import { contextUsage, formatContextUsage, formatSessionCost } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { stringWidth } from "../../util/string-width"
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 export function PromptFooter(props: {
   context: Plugin.Context
@@ -40,10 +35,10 @@ export function PromptFooter(props: {
       props.context.data.location.model.list(session.location),
       session.revert?.messageID,
     )
-    const cost = props.context.data.session.cost(props.sessionID)
+    const cost = formatSessionCost(session, props.context.data.session.list())
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
-      cost > 0 ? money.format(cost) : undefined,
+      session.cost > 0 || cost !== "$0.00" ? cost : undefined,
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
