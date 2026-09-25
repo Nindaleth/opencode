@@ -33,6 +33,7 @@ import { SessionArtifact } from "../artifact.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
+import { SessionCost } from "../cost.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -182,7 +183,9 @@ const layer = Layer.effect(
                 // The Session would go idle; a plugin may admit input to keep this execution working.
                 yield* restore(
                   SessionBackground.outstanding(jobs, store, sessionID).pipe(
-                    Effect.flatMap((background) => hooks.trigger("session", "experimental.idle", { sessionID, background })),
+                    Effect.flatMap((background) =>
+                      hooks.trigger("session", "experimental.idle", { sessionID, background }),
+                    ),
                   ),
                 )
                 if (!(yield* SessionInbox.has(db, sessionID, "input"))) return DrainResult.Complete()
@@ -216,6 +219,25 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
+        if (yield* hooks.has("session", "step.before", next.context.model.ref.providerID)) {
+          const accounting = yield* SessionCost.snapshot({
+            sessionID,
+            agent: next.context.agent.id,
+            model: next.context.model.ref,
+            step,
+          }).pipe(Effect.provideService(Database.Service, { db }))
+          if (accounting) {
+            const decision = yield* hooks.trigger("session", "step.before", { ...accounting, continue: true })
+            if (!decision.continue) {
+              yield* bus.publish(SessionEvent.Synthetic, {
+                sessionID,
+                text: decision.reason ?? "Stopped by a plugin.",
+                metadata: { notice: "step-gate" },
+              })
+              return DrainResult.Complete()
+            }
+          }
+        }
         continuing = yield* runStep(next.context, step)
         stepped = true
         step++

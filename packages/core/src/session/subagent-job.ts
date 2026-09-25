@@ -55,11 +55,7 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
           run: Effect.gen(function* () {
             yield* sessions.resume(recovery.childSessionID)
             const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
-            const assistant = messages.find(
-              (message) =>
-                message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-            )
-            return SubagentCompletion.text(assistant)
+            return SubagentCompletion.text(messages)
           }),
         })
         .pipe(Effect.setContext(context)),
