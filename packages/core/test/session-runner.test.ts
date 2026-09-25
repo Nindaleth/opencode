@@ -971,6 +971,54 @@ const watchRename = Effect.fnUntraced(function* (sessionID: Session.ID) {
 })
 
 describe("SessionRunnerLLM", () => {
+  scenario("step gate stops before a second model Step and records one successful stop", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "step.before", (event) =>
+      Effect.sync(() => {
+        if (event.first) return
+        event.continue = false
+        event.reason = "budget reached"
+      }),
+    )
+    yield* s.admit("Echo this")
+    yield* s.llm.push(TestLLM.tool("call-gated", "echo", { text: "hello" }))
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.messages).toContainEqual(
+      expect.objectContaining({
+        type: "synthetic",
+        text: "budget reached",
+        metadata: { notice: "step-gate" },
+      }),
+    )
+    expect(
+      (yield* s.messages).some((message) => message.type === "assistant" && message.time.completed !== undefined),
+    ).toBe(true)
+  })
+
+  scenario("step gate emits only one notice when multiple hooks veto", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "step.before", (event) =>
+      Effect.sync(() => {
+        event.continue = false
+        event.reason = "first"
+      }),
+    )
+    yield* hooks.register("session", "step.before", (event) =>
+      Effect.sync(() => {
+        event.continue = false
+        event.reason = "second"
+      }),
+    )
+    yield* s.admit("Go")
+    yield* s.resume
+    expect(s.requests).toHaveLength(0)
+    expect(
+      (yield* s.messages).filter((message) => message.type === "synthetic" && message.metadata?.notice === "step-gate"),
+    ).toHaveLength(1)
+  })
+
   scenario("generates the title while the first model step is still running", function* (s) {
     yield* prepareTitleGeneration
 

@@ -83,6 +83,37 @@ const it = testEffect(
 )
 
 describe("PluginSupervisor", () => {
+  it.live("activates and reloads the cost-limit builtin without npm resolution", () =>
+    Effect.gen(function* () {
+      source.operations = [{ type: "add", target: "cost-limit", options: { default: { parent: 5 } } }]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const bus = yield* Bus.Service
+        yield* plugins.awaitActivation
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({ id: "cost-limit", source: { type: "builtin" }, state: { status: "active" } }),
+        )
+        source.operations = [{ type: "add", target: "cost-limit", options: { default: { parent: 0 } } }]
+        yield* bus.publish(Event.Updated, {})
+        yield* Effect.sleep("150 millis")
+        yield* plugins.awaitActivation
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({
+            id: "cost-limit",
+            source: { type: "builtin" },
+            state: expect.objectContaining({ status: "failed" }),
+          }),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      source.operations = []
+    }),
+  )
+
   it.live("activates prompt overrides as a builtin and reports invalid sources", () =>
     Effect.gen(function* () {
       source.operations = [{ type: "add", target: "prompt-overrides", options: { model: { text: "replacement" } } }]

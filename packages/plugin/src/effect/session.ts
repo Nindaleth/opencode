@@ -136,7 +136,23 @@ export interface SessionRetry {
   decision: SessionRetryDecision
 }
 
+export interface SessionStepBefore {
+  readonly sessionID: Session.ID
+  readonly rootID: Session.ID
+  readonly parentID?: Session.ID
+  readonly agent: Agent.ID
+  readonly step: number
+  readonly model: Model.Ref
+  readonly rootModel: Model.Ref
+  readonly rootUserMessageID: SessionMessage.ID
+  readonly cost: { readonly session: number; readonly root: number; readonly descendants: number }
+  readonly first: boolean
+  continue: boolean
+  reason?: string
+}
+
 export interface SessionHooks {
+  readonly "step.before": SessionStepBefore
   readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly compaction: SessionCompaction

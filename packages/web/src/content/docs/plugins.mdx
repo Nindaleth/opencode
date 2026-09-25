@@ -43,6 +43,30 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
+### Limit session cost
+
+The built-in `cost-limit` plugin can stop a prompt when its root session's own spend or its subagents' combined spend reaches a dollar limit. Add it to the `plugins` array of your `opencode.json`:
+
+```json title="opencode.json"
+{
+  "plugins": [
+    {
+      "package": "cost-limit",
+      "options": {
+        "default": { "parent": 5, "subagents": 10 },
+        "rules": [{ "model": "github-copilot/claude-opus-*", "parent": 8, "subagents": 15 }]
+      }
+    }
+  ]
+}
+```
+
+Amounts must be positive, finite dollar values. `parent` covers the root session; `subagents` pools all its descendants, including nested subagents. Each prompt starts a new allowance when its user message is delivered. Rules match the root prompt's `provider/model` with `*` wildcards; the last matching rule replaces the entire default, so an omitted amount disables that limit. Without a matching rule or default, no limit applies.
+
+The first model step of a new root prompt always runs. The plugin checks settled costs before each subsequent model step, including subagent steps and automatic compaction, so work already in progress may exceed a limit. Switching models mid-prompt does not change the rule. When a limit is reached, the session stops normally and shows a notice in the transcript; a stopped subagent also returns its partial answer with the notice. Send a new message to continue with a fresh allowance.
+
+---
+
 ### How plugins are installed
 
 **npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.

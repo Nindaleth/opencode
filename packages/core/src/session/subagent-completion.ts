@@ -7,14 +7,21 @@ import type { SessionMessage } from "./message.js"
 
 export const NO_TEXT = "Subagent completed without a text response."
 
-export function text(message: SessionMessage.Info | undefined) {
-  if (message?.type !== "assistant") return NO_TEXT
-  return (
-    message.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("") || NO_TEXT
+export function text(messages: readonly SessionMessage.Info[]) {
+  const assistant = messages.find(
+    (message) => message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
   )
+  const notice = messages
+    .slice(0, assistant ? messages.indexOf(assistant) : undefined)
+    .find((message) => message.type === "synthetic" && message.metadata?.notice === "step-gate")
+  const response =
+    assistant?.type === "assistant"
+      ? assistant.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("")
+      : ""
+  return [response, notice?.type === "synthetic" ? notice.text : ""].filter(Boolean).join("\n") || NO_TEXT
 }
 
 export const deliver = Effect.fnUntraced(function* (

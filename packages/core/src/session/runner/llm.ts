@@ -31,6 +31,8 @@ import { SessionStep } from "./step.js"
 import { SessionArtifact } from "../artifact.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
+import { PluginHooks } from "../../plugin/hooks.js"
+import { SessionCost } from "../cost.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -47,6 +49,7 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -189,6 +192,25 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
+        if (yield* hooks.has("session", "step.before", next.context.model.ref.providerID)) {
+          const accounting = yield* SessionCost.snapshot({
+            sessionID,
+            agent: next.context.agent.id,
+            model: next.context.model.ref,
+            step,
+          }).pipe(Effect.provideService(Database.Service, { db }))
+          if (accounting) {
+            const decision = yield* hooks.trigger("session", "step.before", { ...accounting, continue: true })
+            if (!decision.continue) {
+              yield* bus.publish(SessionEvent.Synthetic, {
+                sessionID,
+                text: decision.reason ?? "Stopped by a plugin.",
+                metadata: { notice: "step-gate" },
+              })
+              return DrainResult.Complete()
+            }
+          }
+        }
         continuing = yield* runStep(next.context, step)
         step++
         force = false
@@ -368,6 +390,7 @@ export const node = makeLocationNode({
     SessionStore.node,
     SessionCompaction.node,
     Plugin.node,
+    PluginHooks.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

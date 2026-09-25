@@ -44,11 +44,7 @@ export const make: Effect.Effect<Runner, never, Session.Service | Job.Service | 
         run: Effect.gen(function* () {
           yield* sessions.resume(recovery.childSessionID)
           const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
-          const assistant = messages.find(
-            (message) =>
-              message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-          )
-          return SubagentCompletion.text(assistant)
+          return SubagentCompletion.text(messages)
         }),
       }),
     background: Effect.fn("SubagentJob.background")(function* (recovery: Recovery) {
