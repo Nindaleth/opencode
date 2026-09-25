@@ -1,13 +1,14 @@
 export * as SessionArtifact from "./artifact.js"
 
 import path from "path"
-import { Context, Duration, Effect, Layer, Schedule, Semaphore } from "effect"
+import { Context, Duration, Effect, Exit, Layer, Schedule, Semaphore } from "effect"
 import { SessionArtifact } from "@opencode/schema/session-artifact"
 import { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Database } from "../database/database.js"
+import { SessionTable } from "./sql.js"
 
 export type Ref = SessionArtifact.Ref
 export const DIRECTORY = "blob"
@@ -33,13 +34,43 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
-    yield* Database.Service
+    const db = (yield* Database.Service).db
     const directory = path.join(global.data, DIRECTORY)
     const lock = Semaphore.makeUnsafe(1)
     const directoryFor = (sessionID: Session.ID) =>
       /^ses_[a-zA-Z0-9_-]+$/.test(sessionID)
         ? Effect.succeed(path.join(directory, sessionID))
         : Effect.fail(new FSUtil.FileSystemError({ method: "sessionDirectory" }))
+    const sweep = () =>
+      lock.withPermit(
+        Effect.gen(function* () {
+          const listed = yield* db.select({ id: SessionTable.id }).from(SessionTable).all().pipe(Effect.exit)
+          if (Exit.isFailure(listed)) {
+            yield* Effect.logWarning("skipping artifact sweep, session listing failed", listed.cause)
+            return
+          }
+          const entries = yield* fs.readDirectoryEntries(directory).pipe(Effect.exit)
+          if (Exit.isFailure(entries)) {
+            if (!(yield* fs.exists(directory).pipe(Effect.orElseSucceed(() => true)))) return
+            yield* Effect.logWarning("skipping artifact sweep, directory listing failed", entries.cause)
+            return
+          }
+          const live = new Set<string>(listed.value.map((row) => row.id))
+          yield* Effect.forEach(
+            entries.value.filter(
+              (entry) => entry.type === "directory" && /^ses_[a-zA-Z0-9_-]+$/.test(entry.name) && !live.has(entry.name),
+            ),
+            (entry) =>
+              fs.remove(path.join(directory, entry.name), { recursive: true }).pipe(
+                Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
+                Effect.catch((error) =>
+                  Effect.logWarning("artifact directory removal failed", { directory: entry.name, error }),
+                ),
+              ),
+            { discard: true },
+          )
+        }),
+      )
     return Service.of({
       write: (sessionID, input) =>
         Effect.gen(function* () {
@@ -65,7 +96,7 @@ const layer = Layer.effect(
             .remove(yield* directoryFor(sessionID), { recursive: true })
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void))
         }),
-      sweep: () => lock.withPermit(Effect.void),
+      sweep,
     })
   }),
 )
@@ -73,7 +104,7 @@ const layer = Layer.effect(
 const cleanup = Layer.effectDiscard(
   Effect.gen(function* () {
     const artifacts = yield* Service
-    yield* artifacts.sweep().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped)
+    yield* artifacts.sweep().pipe(Effect.repeat(Schedule.spaced(Duration.hours(6))), Effect.forkScoped)
   }),
 )
 
