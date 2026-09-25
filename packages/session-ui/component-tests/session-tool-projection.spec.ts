@@ -14,6 +14,9 @@ story("renders every admitted tool family and hides timeline-only exclusions", a
   for (const id of ["webfetch", "websearch", "subagent", "shell", "question", "skill", "custom"]) {
     await expect(timeline.locator(`[data-timeline-part-id="tool_family_${id}"]`), id).toBeVisible()
   }
+  const shell = timeline.locator('[data-timeline-part-id="tool_family_shell"]')
+  await shell.locator('[data-component="tool-trigger"]').click()
+  await expect(shell.locator('[data-slot="bash-result"]')).toHaveText("stable\nCommand exited with code 0.")
   const files = timeline.locator(
     '[data-timeline-part-ids="tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"]',
   )

@@ -1886,11 +1886,8 @@ ToolRegistry.register({
     }
     function Output() {
       const [streamed, setStreamed] = createSignal("")
-      // Direct-user terminal snapshots are authoritative; agent results can describe background shells.
       const saved = createMemo(() =>
-        props.metadata.status === "exited" || props.metadata.status === "timeout" || props.metadata.status === "killed"
-          ? props.output
-          : undefined,
+        props.status === "completed" && props.metadata.status !== "running" ? props.output : undefined,
       )
       createEffect(() => {
         if (saved() !== undefined) return

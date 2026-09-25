@@ -436,7 +436,10 @@ describe("ShellTool scanner permissions", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: `${fixture.outside}\n` }],
+                content: [
+                  { type: "text", text: `${fixture.outside}\n` },
+                  { type: "text", text: "Command exited with code 0." },
+                ],
               },
             })
             expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -470,7 +473,10 @@ describe("ShellTool scanner permissions", () => {
             value: {
               status: "completed",
               metadata: { exit: 0 },
-              content: [{ type: "text", text: `${fixture.outside}\n` }],
+              content: [
+                { type: "text", text: `${fixture.outside}\n` },
+                { type: "text", text: "Command exited with code 0." },
+              ],
             },
           })
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -517,7 +523,10 @@ describe("ShellTool scanner permissions", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: `${fixture.outside}\n` }],
+                content: [
+                  { type: "text", text: `${fixture.outside}\n` },
+                  { type: "text", text: "Command exited with code 0." },
+                ],
               },
             })
             expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -661,7 +670,10 @@ describe("ShellTool compound syntax approval compatibility", () => {
                 value: {
                   status: "completed",
                   metadata: { exit: 0 },
-                  content: [{ type: "text", text: fixture.output }],
+                  content: [
+                    { type: "text", text: fixture.output },
+                    { type: "text", text: "Command exited with code 0." },
+                  ],
                 },
               })
             }),
@@ -729,7 +741,10 @@ describe("ShellTool ordinary shell syntax", () => {
                   value: {
                     status: "completed",
                     metadata: { exit: 0 },
-                    content: [{ type: "text", text: fixture.output }],
+                    content: [
+                      { type: "text", text: fixture.output },
+                      { type: "text", text: "Command exited with code 0." },
+                    ],
                   },
                 })
               }),
@@ -907,7 +922,10 @@ describe("ShellTool", () => {
               const settled = yield* executeTool(registry, call({ command: helloCommand }))
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-              expect(settled.content).toEqual([{ type: "text", text: "hello" }])
+              expect(settled.content).toEqual([
+                { type: "text", text: "hello" },
+                { type: "text", text: "Command exited with code 0." },
+              ])
               expect(assertions).toMatchObject([
                 {
                   sessionID,
@@ -924,6 +942,36 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  productionIt.live("shows the exit code for silent and non-silent completed commands", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const silent = yield* executeTool(registry, call({ command: "exit 0" }, "call-silent-success"))
+            expect(silent.status).toBe("completed")
+            expect(silent.content).toEqual([
+              { type: "text", text: "(no output)" },
+              { type: "text", text: "Command exited with code 0." },
+            ])
+            const failed = yield* executeTool(registry, call({ command: "exit 7" }, "call-silent-failure"))
+            expect(failed.status).toBe("completed")
+            expect(failed.content).toEqual([
+              { type: "text", text: "(no output)" },
+              { type: "text", text: "Command exited with code 7." },
+            ])
+            const printed = yield* executeTool(registry, call({ command: helloCommand }, "call-printed-success"))
+            expect(printed.content).toEqual([
+              { type: "text", text: "hello" },
+              { type: "text", text: "Command exited with code 0." },
+            ])
+            expect(printed.output).toMatchObject({ output: "hello", exit: 0 })
+          }),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
   )
 
   productionIt.live(
@@ -1362,9 +1410,7 @@ describe("ShellTool", () => {
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
               expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-              expect(settled.content?.[1]).toMatchObject(
-                Expected.text(expect.stringContaining("Exited with code 7")),
-              )
+              expect(settled.content?.[1]).toEqual({ type: "text", text: "Command exited with code 7." })
             }),
           ),
         )
@@ -1391,9 +1437,7 @@ describe("ShellTool", () => {
                 if (!content || content.type !== "text") throw new Error("Expected text content")
                 expect(content.text.includes("output-start")).toBe(false)
                 expect(content.text.includes("output-end")).toBe(true)
-                expect(content).toMatchObject(
-                  Expected.text(expect.stringContaining("full output saved to ")),
-                )
+                expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
               }),
             ),
           )
@@ -1558,7 +1602,7 @@ describe("ShellTool", () => {
             const shellID = settled.metadata?.shellID
             expect(typeof shellID).toBe("string")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-              text: expect.stringContaining("Exited with code 7"),
+              text: expect.stringContaining("Command exited with code 7."),
               description: bodyExitCommand,
               metadata: {
                 source: "shell",
@@ -1608,7 +1652,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "(no output)\n\nExited with code 7",
+                output: "(no output)\n\nCommand exited with code 7.",
               },
             ])
           }),

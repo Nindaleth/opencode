@@ -76,8 +76,13 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const resultMessages = (output: Output) => {
-  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output)
-  return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
+  const notice =
+    output.status === "running" ? BACKGROUND_INSTRUCTION : output.timeout ? ShellResult.notice(output) : undefined
+  return [
+    ...(output.output ? [output.output] : []),
+    ...(notice ? [notice] : []),
+    ...(output.status === "completed" && output.exit !== undefined ? [`Command exited with code ${output.exit}.`] : []),
+  ]
 }
 
 const toolResult = (output: Output) => {

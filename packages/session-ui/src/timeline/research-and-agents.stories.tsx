@@ -236,7 +236,16 @@ const CompleteAgentWorkflow = {
           agent: "explore",
           prompt: "Inspect the timeline implementation.",
         }),
-        storyTool("tool_family_shell", "shell", "completed", { command: "printf stable" }, { output: "stable" }),
+        storyTool(
+          "tool_family_shell",
+          "shell",
+          "completed",
+          { command: "printf stable" },
+          {
+            output: "stable\nCommand exited with code 0.",
+            metadata: { shellID: "shell_completed", exit: 0 },
+          },
+        ),
         storyTool(
           "tool_family_edit",
           "edit",
