@@ -416,6 +416,9 @@ const layer = Layer.effect(
         yield* Effect.forEach(children.data, (child) => result.remove(child.id), { concurrency: 1, discard: true })
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
+        yield* artifacts
+          .removeSession(sessionID)
+          .pipe(Effect.catch((error) => Effect.logWarning("session artifact removal failed", { sessionID, error })))
         yield* bus.remove(sessionID)
       }),
       list: Effect.fn("Session.list")(function* (input) {

@@ -54,6 +54,33 @@ const registerSession = (sessionID: Session.ID) =>
   })
 
 describe("SessionArtifact", () => {
+  it.live("A committed deletion left its orphaned artifact directory until the next sweep", () =>
+    withStore((store, root) =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const deleted = Session.ID.make("ses_deleted_artifacts")
+        const live = Session.ID.make("ses_live_artifacts")
+        yield* registerSession(deleted)
+        yield* registerSession(live)
+        const missing = yield* store.write(deleted, {
+          name: "orphan.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(1),
+        })
+        const kept = yield* store.write(live, {
+          name: "kept.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(2),
+        })
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, deleted)).run().pipe(Effect.orDie)
+        yield* store.sweep()
+        expect(yield* Effect.promise(() => Bun.file(path.join(root, "blob", deleted, missing.key)).exists())).toBe(
+          false,
+        )
+        expect(yield* store.read(live, kept.key)).toEqual(Uint8Array.of(2))
+      }),
+    ),
+  )
   it.live("The sweep erased a fork directory while its event was awaiting publication", () =>
     withStore((store, root) =>
       Effect.gen(function* () {
