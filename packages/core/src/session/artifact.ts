@@ -9,7 +9,7 @@ import { Global } from "@opencode/util/global"
 import { Database } from "../database/database.js"
 import { SessionMessageTable } from "./sql.js"
 import { SessionMessage } from "./message.js"
-import { eq } from "drizzle-orm"
+import { and, asc, eq, gt } from "drizzle-orm"
 
 export type Ref = SessionArtifact.Ref
 export const DIRECTORY = "blob"
@@ -40,24 +40,37 @@ const layer = Layer.effect(
     const sweep = () =>
       lock.withPermit(
         Effect.gen(function* () {
-          const rows = yield* db
-            .select({ data: SessionMessageTable.data })
-            .from(SessionMessageTable)
-            .where(eq(SessionMessageTable.type, "assistant"))
-            .all()
-            .pipe(Effect.orDie)
-          const live = new Set(
-            rows.flatMap((row) => {
-              const message = Schema.decodeUnknownOption(SessionMessage.Assistant)({
-                ...row.data,
-                id: "msg_sweep",
-                type: "assistant",
+          const live = new Set<string>()
+          let cursor: SessionMessage.ID | undefined
+          while (true) {
+            const rows = yield* db
+              .select({ id: SessionMessageTable.id, data: SessionMessageTable.data })
+              .from(SessionMessageTable)
+              .where(
+                cursor === undefined
+                  ? eq(SessionMessageTable.type, "assistant")
+                  : and(eq(SessionMessageTable.type, "assistant"), gt(SessionMessageTable.id, cursor)),
+              )
+              .orderBy(asc(SessionMessageTable.id))
+              .limit(32)
+              .all()
+              .pipe(Effect.orDie)
+            rows
+              .flatMap((row) => {
+                const message = Schema.decodeUnknownOption(SessionMessage.Assistant)({
+                  ...row.data,
+                  id: "msg_sweep",
+                  type: "assistant",
+                })
+                return Option.isSome(message)
+                  ? message.value.content.flatMap((part) => (part.type === "artifact" ? [part.key] : []))
+                  : []
               })
-              return Option.isSome(message)
-                ? message.value.content.flatMap((part) => (part.type === "artifact" ? [part.key] : []))
-                : []
-            }),
-          )
+              .forEach((key) => live.add(key))
+            if (rows.length < 32) break
+            cursor = rows.at(-1)?.id
+            yield* Effect.sleep("1 millis")
+          }
           const entries = yield* fs.readDirectoryEntries(directory).pipe(Effect.orElseSucceed(() => []))
           const cutoff = Date.now() - Duration.toMillis(GRACE)
           yield* Effect.forEach(
