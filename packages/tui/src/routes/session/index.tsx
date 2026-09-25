@@ -24,14 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -698,13 +691,13 @@ export function Session(props: {
         const active = prompt()
         return Boolean(
           !sessionDisposed &&
-            route.sessionID === event.data.sessionID &&
-            active &&
-            active.current.text === expectedText &&
-            (active.current.files?.length ?? 0) === expectedFiles &&
-            (active.current.agents?.length ?? 0) === expectedAgents &&
-            (active.current.skills?.length ?? 0) === expectedSkills &&
-            active.current.pasted.length === expectedPasted,
+          route.sessionID === event.data.sessionID &&
+          active &&
+          active.current.text === expectedText &&
+          (active.current.files?.length ?? 0) === expectedFiles &&
+          (active.current.agents?.length ?? 0) === expectedAgents &&
+          (active.current.skills?.length ?? 0) === expectedSkills &&
+          active.current.pasted.length === expectedPasted,
         )
       }
       const canOpen = () =>
@@ -1283,7 +1276,9 @@ export function Session(props: {
       },
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          (msg) =>
+            msg.type === "assistant" ||
+            (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
@@ -2986,15 +2981,22 @@ const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
 function Shell(props: ToolProps) {
   const stopped = createMemo(() => stoppedShell(props.part, props.metadata))
+  const shellID = () => stringValue(props.metadata.shellID)
+  const background = () => Boolean(shellID()) && props.part.state.status !== "running"
   return (
     <ShellDisplay
       part={props.part}
-      shellID={stringValue(props.metadata.shellID)}
+      shellID={shellID()}
       command={stringValue(props.input.command)}
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
-      background={props.part.state.status === "completed" && props.metadata.status === "running"}
-      output={stopped()?.output ?? (stringValue(props.metadata.shellID) ? undefined : props.output)}
+      background={background()}
+      output={
+        stopped()?.output ??
+        (shellID() && (props.part.state.status !== "completed" || props.metadata.status === "running")
+          ? undefined
+          : props.output)
+      }
       error={stopped()?.notice}
     />
   )
@@ -3237,7 +3239,9 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.path))}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>

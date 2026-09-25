@@ -495,7 +495,10 @@ describe("ShellTool scanner permissions", () => {
             value: {
               status: "completed",
               metadata: { exit: 0 },
-              content: [{ type: "text", text: `${fixture.outside}\n` }],
+              content: [
+                { type: "text", text: `${fixture.outside}\n` },
+                { type: "text", text: "Command exited with code 0." },
+              ],
             },
           })
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -529,7 +532,10 @@ describe("ShellTool scanner permissions", () => {
           value: {
             status: "completed",
             metadata: { exit: 0 },
-            content: [{ type: "text", text: `${fixture.outside}\n` }],
+            content: [
+              { type: "text", text: `${fixture.outside}\n` },
+              { type: "text", text: "Command exited with code 0." },
+            ],
           },
         })
         expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -682,7 +688,10 @@ describe("ShellTool compound syntax approval compatibility", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: fixture.output }],
+                content: [
+                  { type: "text", text: fixture.output },
+                  { type: "text", text: "Command exited with code 0." },
+                ],
               },
             })
           }),
@@ -747,7 +756,10 @@ describe("ShellTool ordinary shell syntax", () => {
                 value: {
                   status: "completed",
                   metadata: { exit: 0 },
-                  content: [{ type: "text", text: fixture.output }],
+                  content: [
+                    { type: "text", text: fixture.output },
+                    { type: "text", text: "Command exited with code 0." },
+                  ],
                 },
               })
             }),
@@ -983,7 +995,10 @@ describe("ShellTool", () => {
             const settled = yield* executeTool(registry, call({ command: helloCommand }))
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-            expect(settled.content).toEqual([{ type: "text", text: "hello" }])
+            expect(settled.content).toEqual([
+              { type: "text", text: "hello" },
+              { type: "text", text: "Command exited with code 0." },
+            ])
             expect(assertions).toMatchObject([
               {
                 sessionID,
@@ -1513,7 +1528,10 @@ describe("ShellTool", () => {
         Effect.gen(function* () {
           const result = yield* executeTool(registry, call({ command: helloCommand, timeout: 10_000 }))
           expect(result.metadata).toMatchObject({ status: "completed", exit: 0 })
-          expect(result.content).toEqual([{ type: "text", text: "hello" }])
+          expect(result.content).toEqual([
+            { type: "text", text: "hello" },
+            { type: "text", text: "Command exited with code 0." },
+          ])
           const jobs = yield* Job.Service
           expect(yield* jobs.runningBackground).toEqual([])
         }),
@@ -1628,7 +1646,8 @@ describe("ShellTool", () => {
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
               const content = settled.content?.[0]
               if (!content || content.type !== "text") throw new Error("Expected text content")
-              expect(settled.content).toHaveLength(1)
+              expect(settled.content).toHaveLength(2)
+              expect(settled.content?.[1]).toEqual({ type: "text", text: "Command exited with code 0." })
               expect(content.text.includes("output-start")).toBe(false)
               expect(content.text.includes("output-end")).toBe(true)
               expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))

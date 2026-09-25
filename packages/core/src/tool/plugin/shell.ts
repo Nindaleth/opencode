@@ -109,7 +109,11 @@ type Output = ReturnType<typeof ShellResult.output> & {
 }
 
 const resultMessages = (output: Output, timeout?: number) => {
-  const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output, timeout)
+  const notice =
+    output.status === "running"
+      ? BACKGROUND_INSTRUCTION
+      : (ShellResult.notice(output, timeout) ??
+        (output.status === "completed" && output.exit === 0 ? "Command exited with code 0." : undefined))
   return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
