@@ -21,7 +21,7 @@ export type Period = {
 }
 
 export type Deps = {
-  readonly store: Pick<SessionStore.Interface, "get" | "lastAssistantAfter" | "release">
+  readonly store: Pick<SessionStore.Interface, "get" | "lastAssistantAfter" | "lastStepGateAfter" | "release">
   readonly jobs: Job.Interface
   readonly inbox: Inbox
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -64,8 +64,13 @@ export const make = (deps: Deps) => {
     // A corrupt message row must not abort the release or skip the outbox row.
     const assistant = yield* deps.store.lastAssistantAfter({ sessionID, afterSeq: startedSeq }).pipe(Effect.result)
     if (Result.isFailure(assistant)) return { status: "error", body: assistant.failure.message }
-    if (assistant.success !== undefined) {
-      return { status: "completed", body: SubagentCompletion.text(assistant.success) }
+    const notice = yield* deps.store
+      .lastStepGateAfter({ sessionID, afterSeq: startedSeq, afterMessageID: assistant.success?.id })
+      .pipe(Effect.result)
+    if (Result.isFailure(notice)) return { status: "error", body: notice.failure.message }
+    if (assistant.success || notice.success) {
+      const messages = [notice.success, assistant.success].filter((message) => message !== undefined)
+      return { status: "completed", body: SubagentCompletion.text(messages) }
     }
     // An empty wake or control-only period has no result to report unless a Job promised one.
     if (mode === "background") return { status: "completed", body: SubagentCompletion.NO_TEXT }

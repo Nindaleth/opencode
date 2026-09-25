@@ -65,6 +65,11 @@ export interface Interface {
     readonly sessionID: Session.ID
     readonly afterSeq?: number
   }) => Effect.Effect<SessionMessage.Assistant | undefined, MessageDecodeError>
+  readonly lastStepGateAfter: (input: {
+    readonly sessionID: Session.ID
+    readonly afterSeq?: number
+    readonly afterMessageID?: SessionMessage.ID
+  }) => Effect.Effect<SessionMessage.Synthetic | undefined, MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
@@ -224,6 +229,31 @@ const layer = Layer.effect(
           if (rows.length < 20) return undefined
           cursorSeq = rows[rows.length - 1]!.seq
         }
+      }),
+      lastStepGateAfter: Effect.fn("SessionStore.lastStepGateAfter")(function* (input) {
+        const rows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, input.sessionID),
+              eq(SessionMessageTable.type, "synthetic"),
+              sql`json_extract(${SessionMessageTable.data}, '$.metadata.notice') = 'step-gate'`,
+              input.afterSeq === undefined ? undefined : gt(SessionMessageTable.seq, input.afterSeq),
+              input.afterMessageID === undefined
+                ? undefined
+                : gt(
+                    SessionMessageTable.seq,
+                    sql`(select seq from session_message where id = ${input.afterMessageID})`,
+                  ),
+            ),
+          )
+          .orderBy(desc(SessionMessageTable.seq))
+          .limit(1)
+          .all()
+          .pipe(Effect.orDie)
+        const [message] = yield* SessionHistory.decodeMessageRows(db, rows)
+        return message?.type === "synthetic" ? message : undefined
       }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* messageRow(messageID)
