@@ -384,7 +384,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
             })
           continue
         }
-        childTool(child, item, message.id)
+        if (item.type === "tool") childTool(child, item, message.id)
       }
       if (message.error) {
         setFrame(child, `error:${message.id}`, {

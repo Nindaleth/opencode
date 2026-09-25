@@ -610,6 +610,7 @@ function renderer(input: Input) {
             await tool(id(`tool-${item.id}`), message.id, done, metadata, timestamp)
             continue
           }
+          if (item.type === "artifact") continue
           const ordinal = ordinals[item.type]++
           // A part never printed live and still empty has nothing to show.
           if (!item.text && !printed.has(key(item.type, message.id, ordinal))) continue

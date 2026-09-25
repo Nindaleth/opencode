@@ -24,6 +24,8 @@ import {
   type SessionUINavigateEffect,
   type SessionUINavigateEvent,
 } from "./session-ui-navigate-machine"
+import { usePlatform } from "@/runtime/platform/platform"
+import { sessionArtifactUrl } from "./session-artifact-url"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -35,6 +37,7 @@ export function SessionUIProvider(
   const params = useParams()
   const data = useData()
   const serverSDK = useServerSDK()
+  const platform = usePlatform()
   const tabs = useTabs()
   const language = useLanguage()
   const settings = useSettings()
@@ -218,6 +221,18 @@ export function SessionUIProvider(
         turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
+        onArtifactHref={
+          platform.platform === "web"
+            ? (sessionID, messageID, key) =>
+                sessionArtifactUrl({
+                  url: serverSDK.url,
+                  password: serverSDK.http.password,
+                  sessionID,
+                  messageID,
+                  key,
+                })
+            : undefined
+        }
         backgroundCompaction={backgroundCompaction()}
       >
         <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>

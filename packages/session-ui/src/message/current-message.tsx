@@ -11,6 +11,7 @@ import {
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 import type { UserRun } from "../timeline/user-runs"
 import type { TurnSources } from "../sources/sources"
+import { ArtifactContent } from "./artifact-content"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 
@@ -123,6 +124,9 @@ export function SessionAssistantContent(props: {
             onContentRendered={props.onContentRendered}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "artifact" ? props.content : undefined}>
+        {(content) => <ArtifactContent messageID={props.message.id} content={content()} />}
       </Match>
     </Switch>
   )

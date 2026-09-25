@@ -50,6 +50,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
         output: undefined,
         content: normalizeContent(result.content),
         ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
+        ...(result.artifacts === undefined ? {} : { artifacts: result.artifacts }),
       }
     }
     if (!("output" in result)) return yield* new Tool.Error({ message: "Tool did not return its declared output" })
@@ -58,6 +59,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
       output,
       content: normalizeContent(result.content, output),
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
+      ...(result.artifacts === undefined ? {} : { artifacts: result.artifacts }),
     }
   })
 

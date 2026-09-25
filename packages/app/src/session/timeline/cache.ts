@@ -139,6 +139,7 @@ export function createTimelineCache(
                 },
                 navigateToSession: data.navigateToSession,
                 sessionHref: data.sessionHref,
+                artifactHref: data.artifactHref,
                 readMedia: data.readMedia,
                 peekMedia: data.peekMedia,
                 shellRunning: data.shellRunning,

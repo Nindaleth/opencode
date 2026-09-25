@@ -121,6 +121,14 @@ export type SessionStructuredError = {
   retryAfterMs?: number
 }
 
+export type SessionMessageAssistantArtifact = {
+  type: "artifact"
+  key: string
+  name: string
+  mime: string
+  size: number
+}
+
 export type SessionInterruptResponse = { interrupted: boolean }
 
 export type FormID = string
@@ -169,6 +177,8 @@ export type SessionInboxSyntheticPayload1 = { text: string; description?: string
 export type SessionMessageNative1 = { [x: string]: any }
 
 export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
+
+export type SessionArtifactRef = { key: string; name: string; mime: string; size: number }
 
 export type SessionMessageToolStateRunning1 = {
   status: "running"
@@ -2114,6 +2124,7 @@ export type SessionToolSuccess = {
     assistantMessageID: SessionMessageID
     id: string
     content: [ToolContent1, ...Array<ToolContent1>]
+    artifacts?: Array<SessionArtifactRef>
     metadata?: { [x: string]: JsonValue }
     executed: boolean
     native?: SessionMessageNative1
@@ -2693,7 +2704,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: AgentID
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantTool
+    | SessionMessageAssistantArtifact
+  >
   snapshot?: { start?: SnapshotID; end?: SnapshotID; files?: Array<RelativePath> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   rawFinish?: string
@@ -2735,6 +2751,7 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+  | SessionMessageAssistantArtifact
 
 export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
@@ -3536,6 +3553,10 @@ export type SessionBackgroundOutput = void
 export type SessionMessageGetInput = { readonly sessionID: string; readonly messageID: string }
 
 export type SessionMessageGetOutput = { data: SessionMessageInfo }["data"]
+
+export type SessionArtifactInput = { readonly sessionID: string; readonly messageID: string; readonly key: string }
+
+export type SessionArtifactOutput = globalThis.Uint8Array
 
 export type SessionFormListInput = { readonly sessionID: string }
 

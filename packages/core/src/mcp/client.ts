@@ -106,7 +106,13 @@ export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>
 
 export type CallToolContent =
   | { readonly type: "text"; readonly text: string }
-  | { readonly type: "media"; readonly data: string; readonly mimeType: string; readonly uri?: string }
+  | {
+      readonly type: "media"
+      readonly data: string
+      readonly mimeType: string
+      readonly name?: string
+      readonly uri?: string
+    }
 
 export interface CallToolResult {
   readonly isError: boolean

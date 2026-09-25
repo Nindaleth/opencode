@@ -83,6 +83,7 @@ export const {
     onSessionHref?: SessionHrefFn
     /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
     backgroundCompaction?: boolean
+    onArtifactHref?: (sessionID: string, messageID: string, key: string) => string | undefined
   }) => {
     return {
       get store() {
@@ -105,6 +106,7 @@ export const {
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      artifactHref: props.onArtifactHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
       get turnDiff() {

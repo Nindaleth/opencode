@@ -10,12 +10,22 @@ import { Bus } from "../bus.js"
 import { Mcp } from "../mcp/index.js"
 import { Mime } from "../mime.js"
 import { Permission } from "../permission.js"
+import { SessionArtifact } from "../session/artifact.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
 import { ReadToolFileSystem } from "./read-filesystem.js"
 import { effectiveName, normalizedName } from "./runtime.js"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
+const EXTENSIONS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/zip": "zip",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+}
 
 /**
  * Registry namespace and permission action names for MCP tools.
@@ -42,6 +52,7 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
     const toolOutput = yield* ToolOutput.Service
+    const artifacts = yield* SessionArtifact.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
 
@@ -89,7 +100,59 @@ export const layer = Layer.effect(
                             .join("\n")
                             .trim() || "MCP tool returned an error",
                       })
-                    const content = yield* Effect.forEach(result.content, (part) => toContent(part, toolOutput))
+                    const refs: SessionArtifact.Ref[] = []
+                    const content = yield* Effect.forEach(result.content, (part) =>
+                      Effect.gen(function* () {
+                        if (part.type === "text") return { type: "text" as const, text: part.text }
+                        const mime = /^[\w.+-]+\/[\w.+-]+$/.test(part.mimeType)
+                          ? part.mimeType
+                          : "application/octet-stream"
+                        const filename =
+                          (
+                            part.name ||
+                            part.uri?.split("/").pop() ||
+                            `artifact-${refs.length + 1}.${EXTENSIONS[mime] ?? "bin"}`
+                          )
+                            .replaceAll("\\", "/")
+                            .split("/")
+                            .pop()!
+                            .replace(/[\x00-\x1f\x7f"\\]/g, "_")
+                            .replace(/\.{2,}/g, ".")
+                            .trim() || `artifact-${refs.length + 1}.bin`
+                        const data = part.data
+                        if (
+                          data.length > Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4 + 4 ||
+                          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)
+                        )
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} omitted: invalid or exceeds 10 MB]`,
+                          }
+                        const bytes = Uint8Array.fromBase64(data)
+                        if (bytes.byteLength > MAX_ARTIFACT_BYTES)
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} omitted: exceeds 10 MB]`,
+                          }
+                        const stored = yield* artifacts.write(context.sessionID, { name: filename, mime, bytes }).pipe(
+                          Effect.tap((ref) =>
+                            Effect.sync(() => {
+                              refs.push(ref)
+                            }),
+                          ),
+                          Effect.option,
+                        )
+                        if (stored._tag === "None")
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} could not be saved]`,
+                          }
+                        return yield* toContent(
+                          { ...part, mimeType: mime, ...(part.name === undefined ? {} : { name: filename }) },
+                          toolOutput,
+                        )
+                      }),
+                    )
                     const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                     const output = () => {
                       if (result.structured !== undefined) return result.structured
@@ -102,6 +165,7 @@ export const layer = Layer.effect(
                     return {
                       output: output(),
                       ...(content.length === 0 ? {} : { content }),
+                      ...(refs.length === 0 ? {} : { artifacts: refs }),
                     }
                   }).pipe(
                     Effect.mapError((error) => {
@@ -157,9 +221,14 @@ const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, tool
   if (part.type === "text") return { type: "text" as const, text: part.text }
   const mime = part.mimeType.split(";", 1)[0].trim().toLowerCase()
   if (ReadToolFileSystem.MEDIA_MIMES.has(mime))
-    return { type: "file" as const, uri: `data:${part.mimeType};base64,${part.data}`, mime: part.mimeType }
+    return {
+      type: "file" as const,
+      uri: `data:${part.mimeType};base64,${part.data}`,
+      mime: part.mimeType,
+      ...(part.name === undefined ? {} : { name: part.name }),
+    }
   const bytes = Buffer.from(part.data, "base64")
-  const label = part.uri ?? "content"
+  const label = part.name ?? part.uri ?? "content"
   if (Mime.isTextual(mime))
     return { type: "text" as const, text: `[Resource ${label} (${part.mimeType})]\n${bytes.toString("utf8")}` }
   const ext = extension(mime)
@@ -173,5 +242,5 @@ const toContent = Effect.fnUntraced(function* (part: Mcp.ToolResultContent, tool
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, ToolOutput.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, ToolOutput.node, SessionArtifact.node],
 })

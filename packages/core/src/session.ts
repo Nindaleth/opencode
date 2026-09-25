@@ -1,10 +1,10 @@
 export * as Session from "./session.js"
 export * from "./session/schema.js"
 
-import { DateTime, Effect, Layer, Context, Option, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Context, Option, Stream } from "effect"
 import { LLMClient } from "@opencode/ai/effect"
 import { ListAnchor, ListCursor, ListFilter } from "@opencode/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { and, asc, desc, eq, gt, lt, lte, sql } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
@@ -17,6 +17,7 @@ import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionBlob } from "./session/blob.js"
+import { SessionArtifact } from "./session/artifact.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
 import { Agent } from "@opencode/schema/agent"
@@ -274,6 +275,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const transport = yield* SessionModelTransport.Service
     const store = yield* SessionStore.Service
+    const artifacts = yield* SessionArtifact.Service
     const instances = yield* Instance.Service
     const moves = yield* SessionMove.Service
     const jobs = yield* Job.Service
@@ -339,7 +341,7 @@ const layer = Layer.effect(
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)
         const boundary = yield* db
-          .select({ id: SessionMessageTable.id })
+          .select({ id: SessionMessageTable.id, seq: SessionMessageTable.seq })
           .from(SessionMessageTable)
           .where(
             and(
@@ -358,6 +360,42 @@ const layer = Layer.effect(
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
+        const keys = new Set<string>()
+        let cursor = -1
+        while (true) {
+          const rows = yield* db
+            .select({ seq: SessionMessageTable.seq, data: SessionMessageTable.data })
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, parent.id),
+                eq(SessionMessageTable.type, "assistant"),
+                gt(SessionMessageTable.seq, cursor),
+                input.before ? lt(SessionMessageTable.seq, boundary.seq) : lte(SessionMessageTable.seq, boundary.seq),
+                sql`json_extract(${SessionMessageTable.data}, '$.time.completed') is not null`,
+              ),
+            )
+            .orderBy(asc(SessionMessageTable.seq))
+            .limit(500)
+            .all()
+            .pipe(Effect.orDie)
+          rows.forEach((row) => {
+            const decoded = Schema.decodeUnknownOption(SessionMessage.Assistant)({
+              ...row.data,
+              id: SessionMessage.ID.make("msg_fork_artifacts"),
+              type: "assistant",
+            })
+            if (Option.isSome(decoded))
+              decoded.value.content.forEach((part) => {
+                if (part.type === "artifact") keys.add(part.key)
+              })
+          })
+          if (rows.length < 500) break
+          const last = rows.at(-1)
+          if (!last) break
+          cursor = last.seq
+          yield* Effect.sleep("1 millis")
+        }
         const inherited = yield* db
           .transaction(() =>
             Effect.all({
@@ -371,14 +409,19 @@ const layer = Layer.effect(
         // instruction-update text the initial baseline already reflects.
         // The parent's location, not the caller's, decides whether the copy's media is stored as blobs.
         const media = yield* mediaBlob(parent)
-        yield* bus
-          .publish(SessionEvent.Forked, {
-            sessionID,
-            parentID: parent.id,
-            boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
-            ...inherited,
-          })
-          .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
+        yield* artifacts
+          .withCopiedFork(
+            { parentID: parent.id, sessionID, keys: Array.from(keys) },
+            bus
+              .publish(SessionEvent.Forked, {
+                sessionID,
+                parentID: parent.id,
+                boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
+                ...inherited,
+              })
+              .pipe(Effect.provideService(SessionBlob.ForkMedia, media)),
+          )
+          .pipe(Effect.orDie)
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
@@ -398,6 +441,9 @@ const layer = Layer.effect(
         yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
+        yield* artifacts
+          .removeSession(sessionID)
+          .pipe(Effect.catch((error) => Effect.logWarning("session artifact removal failed", { sessionID, error })))
         yield* bus.remove(sessionID)
       }),
       list: Effect.fn("Session.list")(function* (input = {}) {
@@ -552,6 +598,7 @@ export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.gl
     SessionModelTransport.node,
     llmClient,
     SessionStore.node,
+    SessionArtifact.node,
     Instance.node,
     SessionInbox.node,
     SessionMove.node,

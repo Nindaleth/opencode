@@ -345,25 +345,38 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       // Terminal tool events are self-contained; projection is a direct copy and
       // never reaches into ephemeral progress history.
       "session.tool.success": (event) => {
-        return adapter.updateAssistantPart(
-          event.data.assistantMessageID,
-          { type: "tool", callID: event.data.id },
-          (match) => {
-            if (match.state.status === "running") {
-              match.executed = event.data.executed || match.executed === true
-              if (event.data.native) match.native = { ...match.native, ...event.data.native }
-              match.time.completed = created
-              match.state = castDraft(
-                SessionMessage.ToolStateCompleted.make({
-                  status: "completed",
-                  input: match.state.input,
-                  content: event.data.content,
-                  ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
-                }),
-              )
-            }
-          },
-        )
+        return Effect.gen(function* () {
+          const assistant = event.data.artifacts?.length
+            ? yield* adapter.getAssistant(event.data.assistantMessageID)
+            : undefined
+          const tool = assistant?.content.findLast((part) => part.type === "tool" && part.id === event.data.id)
+          const artifacts = tool?.type === "tool" && tool.state.status === "running" ? (event.data.artifacts ?? []) : []
+          yield* adapter.updateAssistantPart(
+            event.data.assistantMessageID,
+            { type: "tool", callID: event.data.id },
+            (match) => {
+              if (match.state.status === "running") {
+                match.executed = event.data.executed || match.executed === true
+                if (event.data.native) match.native = { ...match.native, ...event.data.native }
+                match.time.completed = created
+                match.state = castDraft(
+                  SessionMessage.ToolStateCompleted.make({
+                    status: "completed",
+                    input: match.state.input,
+                    content: event.data.content,
+                    ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
+                  }),
+                )
+              }
+            },
+          )
+          yield* Effect.forEach(artifacts, (ref) =>
+            adapter.appendAssistantPart(
+              event.data.assistantMessageID,
+              SessionMessage.AssistantArtifact.make({ type: "artifact", ...ref }),
+            ),
+          )
+        })
       },
       "session.tool.failed": (event) => {
         return adapter.updateAssistantPart(

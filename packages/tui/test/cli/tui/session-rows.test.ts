@@ -11,6 +11,19 @@ import {
   type SessionRow,
 } from "../../../src/routes/session/rows"
 
+test("download-only artifacts do not enter the TUI transcript grouping", () => {
+  const message = assistant("assistant-artifact", [
+    { type: "text", text: "before" },
+    { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+    { type: "text", text: "after" },
+  ])
+  const rows = reduceSessionRows([message])
+  expect(rows.filter((row) => row.type === "part")).toEqual([
+    { type: "part", ref: { messageID: message.id, partID: "text:0" } },
+    { type: "part", ref: { messageID: message.id, partID: "text:1" } },
+  ])
+})
+
 test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
   createRoot((dispose) => {
     try {
