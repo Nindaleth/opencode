@@ -464,7 +464,7 @@ test("vertical session tabs switch to horizontal below readable content width", 
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
 
   setup.resize(100, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
+  await setup.waitForFrame((frame) => frame.split("\n")[1].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
   setup.resize(120, 30)
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
@@ -502,7 +502,7 @@ test("narrow vertical session tabs collapse to a compact rail with the terminal"
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")
 
   setup.resize(68, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
+  await setup.waitForFrame((frame) => frame.split("\n")[1].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
   setup.resize(80, 30)
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")

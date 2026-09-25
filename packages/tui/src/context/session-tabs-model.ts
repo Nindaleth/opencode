@@ -30,8 +30,8 @@ export function sessionTabComplete(unread: SessionTabUnread | undefined, busy: b
   return unread === "activity" && !busy
 }
 
-export const SESSION_TAB_WIDTH = 22
-export const SESSION_TAB_MAX_WIDTH = 32
+export const SESSION_TAB_WIDTH = 28
+export const SESSION_TAB_MAX_WIDTH = 40
 export const SESSION_TAB_MIN_WIDTH = 8
 // Overflow markers reserve one gap cell beside the arrow and count, e.g. "‹12 " and " 12›".
 export const sessionTabOverflowWidth = (count: number) => String(count).length + 2

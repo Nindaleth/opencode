@@ -604,9 +604,7 @@ function VerticalSessionTabs(props: {
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
   const items = ordered
-  const highlightColor = createMemo(() =>
-    tint(background(), actionHovered(), actionHovered().a),
-  )
+  const highlightColor = createMemo(() => tint(background(), actionHovered(), actionHovered().a))
   const highlighted = (sessionID: string | undefined) =>
     sessionID !== undefined && (activeID() === sessionID || hovered() === sessionID || dragging() === sessionID)
   const addHighlighted = () => newTab() || addHovered()
@@ -858,9 +856,7 @@ function VerticalSessionTabs(props: {
               const separatorUpperColor = createMemo(() =>
                 tint(background(), previousGlowHue(), 0.1 * previousGlowLevel()),
               )
-              const separatorLowerColor = createMemo(() =>
-                tint(background(), glowHue(), 0.12 * glowLevel()),
-              )
+              const separatorLowerColor = createMemo(() => tint(background(), glowHue(), 0.12 * glowLevel()))
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -925,9 +921,7 @@ function VerticalSessionTabs(props: {
                         edge="top"
                         width={width()}
                         color={pulseBackground()}
-                        background={
-                          highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()
-                        }
+                        background={highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()}
                       />
                       <SessionTabHalfRow
                         top={1}
@@ -1528,10 +1522,11 @@ function HorizontalSessionTabs(props: {
   return (
     <box
       ref={(element) => (strip = element)}
-      height={1}
+      height={3}
       flexShrink={0}
       position="relative"
       flexDirection="row"
+      alignItems="center"
       zIndex={1}
       onMouseOut={(event) => {
         marquee.leaveHovered()
@@ -1646,8 +1641,10 @@ function HorizontalSessionTabs(props: {
           return (
             <box
               width={width()}
+              height={3}
               position="relative"
               flexDirection="row"
+              alignItems="center"
               backgroundColor={background()}
               onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
               onMouseOut={() => marquee.leave(tab.sessionID)}
@@ -1682,6 +1679,7 @@ function HorizontalSessionTabs(props: {
               }}
             >
               <TabPulse
+                top={1}
                 enabled={animations()}
                 active={status().busy && !status().attention}
                 promptPulse={status().promptPulse}
@@ -1694,7 +1692,7 @@ function HorizontalSessionTabs(props: {
                 backgroundColor={background()}
                 onLevel={setSweepLevel}
               />
-              <box zIndex={1} width="100%" flexDirection="row">
+              <box zIndex={1} width="100%" height={1} flexDirection="row">
                 <TabIndicator
                   status={status()}
                   label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}

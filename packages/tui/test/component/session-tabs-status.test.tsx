@@ -142,7 +142,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         await app.waitForFrame((frame) => frame.includes(`${state.label.padStart(2)} First`))
         const rows = app.captureCharFrame().split("\n")
         expect(rows.find((line) => line.includes("First"))!.indexOf("First")).toBe(titleColumn)
-        expect(rows[orientation === "vertical" ? 2 : 1]?.trim()).toBe(orientation === "vertical" ? "project" : "")
+        expect(rows[orientation === "vertical" ? 2 : 0]?.trim()).toBe(orientation === "vertical" ? "project" : "")
       }
 
       for (const attention of ["question", "permission"] as const) {
@@ -158,9 +158,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         const glow = () => {
           const colors = app
             .captureSpans()
-            .lines[
-              orientation === "vertical" ? 1 : 0
-            ]!.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
+            .lines[1]!.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
           return (
             Math.abs(colors[1]!.r - colors[18]!.r) +
             Math.abs(colors[1]!.g - colors[18]!.g) +
@@ -189,7 +187,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(color?.toInts()).toEqual(
           (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
         )
-        await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
+        await app.mockMouse.click(1, 1)
         await app.renderOnce()
         expect(active()).toBe("first")
         expect(status().unread).toBeUndefined()
