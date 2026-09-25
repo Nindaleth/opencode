@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { DateTime, Effect, Option, Schema } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect"
 import fs from "node:fs/promises"
 import { Database } from "@opencode/core/database/database"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -37,8 +37,83 @@ const withStore = <A, E, R>(body: (store: SessionArtifact.Interface, root: strin
       ),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
+const registerSession = (sessionID: Session.ID) =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    yield* db
+      .insert(ProjectTable)
+      .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+      .onConflictDoNothing()
+      .run()
+      .pipe(Effect.orDie)
+    yield* db
+      .insert(SessionTable)
+      .values({ id: sessionID, project_id: Project.ID.global, directory: "/project", slug: sessionID, version: "test" })
+      .run()
+      .pipe(Effect.orDie)
+  })
 
 describe("SessionArtifact", () => {
+  it.live("The sweep erased a fork directory while its event was awaiting publication", () =>
+    withStore((store, root) =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        const parentID = Session.ID.make("ses_fork_source")
+        const sessionID = Session.ID.make("ses_fork_destination")
+        yield* db
+          .insert(SessionTable)
+          .values({
+            id: parentID,
+            project_id: Project.ID.global,
+            directory: "/project",
+            slug: "parent",
+            version: "test",
+          })
+          .run()
+          .pipe(Effect.orDie)
+        const ref = yield* store.write(parentID, {
+          name: "report.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(42),
+        })
+        const copying = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const fork = yield* store
+          .withCopiedFork(
+            { parentID, sessionID, keys: [ref.key] },
+            Effect.gen(function* () {
+              yield* Deferred.succeed(copying, undefined)
+              yield* Deferred.await(release)
+              yield* db
+                .insert(SessionTable)
+                .values({
+                  id: sessionID,
+                  project_id: Project.ID.global,
+                  directory: "/project",
+                  slug: "child",
+                  version: "test",
+                })
+                .run()
+                .pipe(Effect.orDie)
+            }),
+          )
+          .pipe(Effect.forkScoped)
+        yield* Deferred.await(copying)
+        const sweeping = yield* store.sweep().pipe(Effect.forkScoped)
+        expect(Option.isNone(yield* Fiber.join(sweeping).pipe(Effect.timeoutOption("40 millis")))).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(path.join(root, "blob", sessionID, ref.key)).exists())).toBe(true)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(fork)
+        yield* Fiber.join(sweeping)
+        expect(yield* store.read(sessionID, ref.key)).toEqual(Uint8Array.of(42))
+      }),
+    ),
+  )
   it.live("V1-only directories survived cleanup while scanning every assistant message", () =>
     withStore((store, root) =>
       Effect.gen(function* () {
@@ -162,6 +237,7 @@ describe("SessionArtifact", () => {
       Effect.gen(function* () {
         const owner = Session.ID.make("ses_artifact_owner")
         const other = Session.ID.make("ses_artifact_other")
+        yield* registerSession(owner)
         const ref = yield* store.write(owner, {
           name: "../report.zip",
           mime: "application/zip",
@@ -179,6 +255,7 @@ describe("SessionArtifact", () => {
     withStore((store, root) =>
       Effect.gen(function* () {
         const sessionID = Session.ID.make("ses_artifact_filename")
+        yield* registerSession(sessionID)
         const bytes = Uint8Array.of(0, 42, 255)
         const ref = yield* store.write(sessionID, { name: "../../report.zip", mime: "application/zip", bytes })
         expect(ref.name).toBe("report.zip")

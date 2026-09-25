@@ -24,6 +24,10 @@ export interface Interface {
   ) => Effect.Effect<Ref, FSUtil.Error>
   readonly read: (sessionID: Session.ID, key: string) => Effect.Effect<Uint8Array, FSUtil.Error>
   readonly removeSession: (sessionID: Session.ID) => Effect.Effect<void, FSUtil.Error>
+  readonly withCopiedFork: <A, E, R>(
+    input: { parentID: Session.ID; sessionID: Session.ID; keys: ReadonlyArray<string> },
+    publish: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E | FSUtil.Error, R>
   readonly sweep: () => Effect.Effect<void>
 }
 
@@ -96,6 +100,27 @@ const layer = Layer.effect(
             .remove(yield* directoryFor(sessionID), { recursive: true })
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void))
         }),
+      withCopiedFork: (input, publish) =>
+        lock.withPermit(
+          Effect.gen(function* () {
+            const parent = yield* directoryFor(input.parentID)
+            const child = yield* directoryFor(input.sessionID)
+            yield* Effect.forEach(
+              new Set(input.keys),
+              (key) =>
+                Effect.gen(function* () {
+                  if (!/^blob_[0-9a-f-]{36}$/.test(key)) return
+                  const bytes = yield* fs
+                    .readFile(path.join(parent, key))
+                    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
+                  if (bytes === undefined) return
+                  yield* fs.writeWithDirs(path.join(child, key), bytes)
+                }),
+              { discard: true },
+            )
+            return yield* publish
+          }),
+        ),
       sweep,
     })
   }),

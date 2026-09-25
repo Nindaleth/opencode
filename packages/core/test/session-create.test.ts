@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer, Stream } from "effect"
+import { DateTime, Effect, Exit, Layer, Option, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
@@ -23,6 +23,7 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionArtifact } from "@opencode/core/session/artifact"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -40,6 +41,7 @@ import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
 import { tmpdirScoped } from "./fixture/tmpdir"
+import { Global } from "@opencode/util/global"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -81,6 +83,74 @@ const projectIt = testEffect(
     ],
   ),
 )
+const artifactIt = testEffect(Layer.empty)
+const withArtifactSessions = <A, E, R>(body: (root: string) => Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    return yield* body(tmp.path).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(
+          LayerNode.group([
+            Database.node,
+            Bus.node,
+            Project.node,
+            SessionProjector.node,
+            SessionStore.node,
+            SessionArtifact.node,
+            Session.node,
+          ]),
+          [
+            Global.node.replace(Global.layerWith({ data: tmp.path })),
+            Bus.node.replace(Bus.configured({ persist: true })),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+          ],
+        ),
+      ),
+    )
+  })
+const publishArtifact = (sessionID: Session.ID, ref: SessionArtifact.Ref, completed: boolean) =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const assistantMessageID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID,
+      assistantMessageID,
+      agent: Agent.defaultID,
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+      started: 0,
+    })
+    yield* bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID,
+      assistantMessageID,
+      id: "call_artifact",
+      name: "tool",
+    })
+    yield* bus.publish(SessionEvent.Tool.Called, {
+      sessionID,
+      assistantMessageID,
+      id: "call_artifact",
+      input: {},
+      executed: false,
+    })
+    yield* bus.publish(SessionEvent.Tool.Success, {
+      sessionID,
+      assistantMessageID,
+      id: "call_artifact",
+      content: [{ type: "text", text: "download" }],
+      artifacts: [ref],
+      executed: false,
+    })
+    if (completed)
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+    return assistantMessageID
+  })
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = Session.ID.create()
 
@@ -103,6 +173,126 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  artifactIt.live("Forked artifact references lost their bytes when the parent was deleted", () =>
+    withArtifactSessions((root) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const artifacts = yield* SessionArtifact.Service
+        const parent = yield* sessions.create({ location })
+        const ref = yield* artifacts.write(parent.id, {
+          name: "report.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(42),
+        })
+        yield* publishArtifact(parent.id, ref, true)
+        const child = yield* sessions.fork({ sessionID: parent.id })
+        yield* sessions.remove(parent.id)
+        expect(yield* artifacts.read(child.id, ref.key)).toEqual(Uint8Array.of(42))
+        expect(yield* Effect.promise(() => Bun.file(path.join(root, "blob", child.id, ref.key)).exists())).toBe(true)
+      }),
+    ),
+  )
+
+  artifactIt.live("Forks before an artifact message copied files outside their boundary", () =>
+    withArtifactSessions(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const artifacts = yield* SessionArtifact.Service
+        const parent = yield* sessions.create({ location })
+        const first = yield* artifacts.write(parent.id, {
+          name: "first.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(1),
+        })
+        yield* publishArtifact(parent.id, first, true)
+        const second = yield* artifacts.write(parent.id, {
+          name: "second.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(2),
+        })
+        const boundary = yield* publishArtifact(parent.id, second, true)
+        const child = yield* sessions.fork({ sessionID: parent.id, before: boundary })
+        expect(yield* artifacts.read(child.id, first.key)).toEqual(Uint8Array.of(1))
+        expect(Option.isNone(yield* Effect.option(artifacts.read(child.id, second.key)))).toBe(true)
+      }),
+    ),
+  )
+
+  artifactIt.live("Running assistant artifacts were copied into forks without settled history", () =>
+    withArtifactSessions(() =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const artifacts = yield* SessionArtifact.Service
+        const parent = yield* sessions.create({ location })
+        const settled = yield* artifacts.write(parent.id, {
+          name: "settled.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(1),
+        })
+        yield* publishArtifact(parent.id, settled, true)
+        const running = yield* artifacts.write(parent.id, {
+          name: "running.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(2),
+        })
+        yield* publishArtifact(parent.id, running, false)
+        const child = yield* sessions.fork({ sessionID: parent.id })
+        expect(yield* artifacts.read(child.id, settled.key)).toEqual(Uint8Array.of(1))
+        expect(Option.isNone(yield* Effect.option(artifacts.read(child.id, running.key)))).toBe(true)
+      }),
+    ),
+  )
+
+  artifactIt.live("Failed artifact copies published a durable fork without its files", () =>
+    withArtifactSessions((root) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const artifacts = yield* SessionArtifact.Service
+        const db = (yield* Database.Service).db
+        const parent = yield* sessions.create({ location })
+        const ref = yield* artifacts.write(parent.id, {
+          name: "report.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(42),
+        })
+        yield* publishArtifact(parent.id, ref, true)
+        yield* Effect.promise(() => fs.chmod(path.join(root, "blob"), 0o500))
+        const fork = yield* sessions
+          .fork({ sessionID: parent.id })
+          .pipe(Effect.exit, Effect.ensuring(Effect.promise(() => fs.chmod(path.join(root, "blob"), 0o700))))
+        expect(Exit.isFailure(fork)).toBe(true)
+        expect((yield* sessions.list()).data.map((session) => session.id)).toEqual([parent.id])
+        expect(
+          yield* db
+            .select({ id: EventTable.id })
+            .from(EventTable)
+            .where(eq(EventTable.type, Bus.versionedType(SessionEvent.Forked.type, 1)))
+            .all()
+            .pipe(Effect.orDie),
+        ).toEqual([])
+      }),
+    ),
+  )
+
+  artifactIt.live("Missing source artifact files prevented otherwise valid forks", () =>
+    withArtifactSessions((root) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const artifacts = yield* SessionArtifact.Service
+        const parent = yield* sessions.create({ location })
+        const ref = yield* artifacts.write(parent.id, {
+          name: "report.zip",
+          mime: "application/zip",
+          bytes: Uint8Array.of(42),
+        })
+        yield* publishArtifact(parent.id, ref, true)
+        yield* Effect.promise(() => Bun.file(path.join(root, "blob", parent.id, ref.key)).delete())
+        const child = yield* sessions.fork({ sessionID: parent.id })
+        expect(Option.isNone(yield* Effect.option(artifacts.read(child.id, ref.key)))).toBe(true)
+        expect((yield* sessions.context(child.id)).some((item) => item.type === "assistant")).toBe(true)
+      }),
+    ),
+  )
   liveIt.live("preserves the project canonical directory when creating a session in another clone", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -809,9 +999,10 @@ describe("Session.create", () => {
       const session = yield* Session.Service
       const parent = yield* session.create({ location })
 
-      expect(
-        yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip),
-      ).toMatchObject({ _tag: "Session.ForkEmptyError", sessionID: parent.id })
+      expect(yield* session.fork({ sessionID: parent.id }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.ForkEmptyError",
+        sessionID: parent.id,
+      })
     }),
   )
 
