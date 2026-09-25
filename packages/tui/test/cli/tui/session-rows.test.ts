@@ -11,6 +11,19 @@ import {
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
 
+test("download-only artifacts do not enter the TUI transcript grouping", () => {
+  const message = assistant("assistant-artifact", [
+    { type: "text", text: "before" },
+    { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+    { type: "text", text: "after" },
+  ])
+  const rows = reduceSessionRows([message])
+  expect(rows.filter((row) => row.type === "part")).toEqual([
+    { type: "part", ref: { messageID: message.id, partID: "text:0" } },
+    { type: "part", ref: { messageID: message.id, partID: "text:1" } },
+  ])
+})
+
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])
   first.time = { created: 8_000, completed: 11_000 }

@@ -8,7 +8,19 @@ import { Bus } from "../bus.js"
 
 import { Mcp } from "../mcp/index.js"
 import { Permission } from "../permission.js"
+import { SessionArtifact } from "../session/artifact.js"
 import { Tool } from "../tool.js"
+
+const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
+const MODEL_MIMES = new Set(["application/pdf", "image/gif", "image/jpeg", "image/png", "image/webp"])
+const EXTENSIONS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/zip": "zip",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+}
 
 /**
  * Registry namespace and permission action names for MCP tools.
@@ -30,6 +42,7 @@ export const layer = Layer.effect(
     const tools = yield* Tool.Service
     const bus = yield* Bus.Service
     const permission = yield* Permission.Service
+    const artifacts = yield* SessionArtifact.Service
     const lock = Semaphore.makeUnsafe(1)
     let discovered: Mcp.Tool[] = []
 
@@ -83,14 +96,60 @@ export const layer = Layer.effect(
                             .join("\n")
                             .trim() || "MCP tool returned an error",
                       })
-                    const content = result.content.map((part) =>
-                      part.type === "text"
-                        ? { type: "text" as const, text: part.text }
-                        : {
-                            type: "file" as const,
-                            uri: `data:${part.mimeType};base64,${part.data}`,
-                            mime: part.mimeType,
-                          },
+                    const refs: SessionArtifact.Ref[] = []
+                    const content = yield* Effect.forEach(result.content, (part) =>
+                      Effect.gen(function* () {
+                        if (part.type === "text") return { type: "text" as const, text: part.text }
+                        const mime = /^[\w.+-]+\/[\w.+-]+$/.test(part.mimeType)
+                          ? part.mimeType
+                          : "application/octet-stream"
+                        const filename =
+                          (
+                            part.name ||
+                            part.uri?.split("/").pop() ||
+                            `artifact-${refs.length + 1}.${EXTENSIONS[mime] ?? "bin"}`
+                          )
+                            .replaceAll("\\", "/")
+                            .split("/")
+                            .pop()!
+                            .replace(/[\x00-\x1f\x7f"\\]/g, "_")
+                            .replace(/\.{2,}/g, ".")
+                            .trim() || `artifact-${refs.length + 1}.bin`
+                        const data = part.data
+                        if (
+                          data.length > Math.ceil(MAX_ARTIFACT_BYTES / 3) * 4 + 4 ||
+                          !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)
+                        )
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} omitted: invalid or exceeds 10 MB]`,
+                          }
+                        const bytes = Uint8Array.fromBase64(data)
+                        if (bytes.byteLength > MAX_ARTIFACT_BYTES)
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} omitted: exceeds 10 MB]`,
+                          }
+                        const stored = yield* artifacts.write({ name: filename, mime, bytes }).pipe(
+                          Effect.tap((ref) =>
+                            Effect.sync(() => {
+                              refs.push(ref)
+                            }),
+                          ),
+                          Effect.option,
+                        )
+                        if (stored._tag === "None")
+                          return {
+                            type: "text" as const,
+                            text: `[Binary MCP attachment ${filename} could not be saved]`,
+                          }
+                        if (MODEL_MIMES.has(mime))
+                          return { type: "file" as const, uri: `data:${mime};base64,${data}`, mime, name: filename }
+                        return {
+                          type: "text" as const,
+                          text: `[Generated ${filename} (${mime}, ${bytes.byteLength} bytes) - offered as a download]`,
+                        }
+                      }),
                     )
                     const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
                     const output = () => {
@@ -107,6 +166,7 @@ export const layer = Layer.effect(
                     return {
                       output: output(),
                       ...(content.length === 0 ? {} : { content }),
+                      ...(refs.length === 0 ? {} : { artifacts: refs }),
                     }
                   }).pipe(
                     Effect.mapError((error) =>
@@ -148,5 +208,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Tool.node, Mcp.node, Bus.node, Permission.node],
+  deps: [Tool.node, Mcp.node, Bus.node, Permission.node, SessionArtifact.node],
 })

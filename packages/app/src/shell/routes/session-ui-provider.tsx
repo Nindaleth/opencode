@@ -12,6 +12,8 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { readLocalImage } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
+import { usePlatform } from "@/runtime/platform/platform"
+import { sessionArtifactUrl } from "./session-artifact-url"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -23,6 +25,7 @@ export function SessionUIProvider(
   const params = useParams()
   const data = useData()
   const serverSDK = useServerSDK()
+  const platform = usePlatform()
   const tabs = useTabs()
   const language = useLanguage()
   const directory = () => props.directory
@@ -79,6 +82,18 @@ export function SessionUIProvider(
       shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
+      onArtifactHref={
+        platform.platform === "web"
+          ? (sessionID, messageID, key) =>
+              sessionArtifactUrl({
+                url: serverSDK.url,
+                password: serverSDK.server.http.password,
+                sessionID,
+                messageID,
+                key,
+              })
+          : undefined
+      }
     >
       <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
         <LocalProvider>{props.children}</LocalProvider>

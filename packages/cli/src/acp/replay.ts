@@ -69,6 +69,7 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
           content: { type: "text", text: part.text },
         },
       ]
+    if (part.type === "artifact") return []
     const call: SessionUpdate = {
       sessionUpdate: "tool_call",
       ...pendingToolCall({

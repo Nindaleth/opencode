@@ -92,6 +92,7 @@ export function timelineCategory(
 ): keyof TimelineDetail | undefined {
   if (content.type === "text") return
   if (content.type === "reasoning") return "thinking"
+  if (content.type === "artifact") return
   if (["shell", "execute", "bash"].includes(content.name)) return "shell"
   if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"
   if (["subagent", "task"].includes(content.name)) return "subagents"

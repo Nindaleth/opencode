@@ -791,6 +791,19 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       ),
     )
     .add(
+      HttpApiEndpoint.get("session.artifact", "/api/session/:sessionID/message/:messageID/artifact/:key", {
+        params: { sessionID: Session.ID, messageID: SessionMessage.ID, key: Schema.String },
+        success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+        error: [SessionNotFoundError, MessageNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.artifact",
+          summary: "Download session artifact",
+          description: "Download a binary artifact owned by a projected assistant message in this session.",
+        }),
+      ),
+    )
+    .add(
       HttpApiEndpoint.get("session.form.list", "/api/session/:sessionID/form", {
         params: { sessionID: Schema.String },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),

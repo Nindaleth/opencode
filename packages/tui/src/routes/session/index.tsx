@@ -3509,6 +3509,7 @@ function formatSessionTranscript(
     const content = message.content.flatMap((item) => {
       if (item.type === "text") return [item.text]
       if (item.type === "reasoning") return thinking ? [`_Thinking:_\n\n${item.text}`] : []
+      if (item.type === "artifact") return []
       if (!tools) return []
       const input = typeof item.state.input === "string" ? item.state.input : JSON.stringify(item.state.input, null, 2)
       const output =

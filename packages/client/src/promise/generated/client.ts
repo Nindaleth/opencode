@@ -87,6 +87,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageGetInput,
   SessionMessageGetOutput,
+  SessionArtifactInput,
+  SessionArtifactOutput,
   SessionFormListInput,
   SessionFormListOutput,
   SessionFormCreateInput,
@@ -1011,6 +1013,18 @@ export function make(options: ClientOptions) {
             requestOptions,
           ).then((value) => value.data),
       },
+      artifact: (input: SessionArtifactInput, requestOptions?: RequestOptions) =>
+        request<SessionArtifactOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}/artifact/${encodeURIComponent(input.key)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+            binary: true,
+          },
+          requestOptions,
+        ),
       form: {
         list: (input: SessionFormListInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: SessionFormListOutput }>(
@@ -2132,7 +2146,7 @@ export function make(options: ClientOptions) {
               agent: input?.["agent"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,

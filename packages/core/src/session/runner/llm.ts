@@ -28,6 +28,7 @@ import { llmClient } from "../../effect/app-node-platform.js"
 import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
+import { SessionArtifact } from "../artifact.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
@@ -370,6 +371,7 @@ export const node = makeLocationNode({
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,
+    SessionArtifact.node,
     Database.node,
   ],
 })

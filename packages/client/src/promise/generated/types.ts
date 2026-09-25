@@ -141,6 +141,14 @@ export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: 
 
 export type SessionStructuredError = { type: string; message: string; status?: number; response?: { body: string } }
 
+export type SessionMessageAssistantArtifact = {
+  type: "artifact"
+  key: string
+  name: string
+  mime: string
+  size: number
+}
+
 export type SessionMessageCompactionRunning = {
   type: "compaction"
   id: string
@@ -202,6 +210,8 @@ export type ShellInfo = {
 export type SessionMessageProviderState1 = { [x: string]: any }
 
 export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
+
+export type SessionArtifactRef = { key: string; name: string; mime: string; size: number }
 
 export type SessionMessageToolStateRunning1 = {
   status: "running"
@@ -1859,6 +1869,7 @@ export type SessionToolSuccess = {
     assistantMessageID: string
     id: string
     content: [ToolContent1, ...Array<ToolContent1>]
+    artifacts?: Array<SessionArtifactRef>
     metadata?: { [x: string]: JsonValue }
     executed: boolean
     resultState?: SessionMessageProviderState1
@@ -2279,7 +2290,12 @@ export type SessionMessageAssistant = {
   type: "assistant"
   agent: string
   model: ModelRef
-  content: Array<SessionMessageAssistantText | SessionMessageAssistantReasoning | SessionMessageAssistantTool>
+  content: Array<
+    | SessionMessageAssistantText
+    | SessionMessageAssistantReasoning
+    | SessionMessageAssistantTool
+    | SessionMessageAssistantArtifact
+  >
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   rawFinish?: string
@@ -2294,6 +2310,7 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+  | SessionMessageAssistantArtifact
 
 export type FormInfo = { id: string; sessionID: string; title: string; metadata?: FormMetadata; fields: FormFields }
 
@@ -3290,6 +3307,13 @@ export type SessionImportInput = {
                     }
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
               }
+            | {
+                readonly type: "artifact"
+                readonly key: string
+                readonly name: string
+                readonly mime: string
+                readonly size: number
+              }
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
@@ -3627,6 +3651,13 @@ export type SessionImportInput = {
                     }
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
               }
+            | {
+                readonly type: "artifact"
+                readonly key: string
+                readonly name: string
+                readonly mime: string
+                readonly size: number
+              }
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
@@ -3963,6 +3994,13 @@ export type SessionImportInput = {
                       readonly metadata?: { readonly [x: string]: JsonValue }
                     }
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
+              }
+            | {
+                readonly type: "artifact"
+                readonly key: string
+                readonly name: string
+                readonly mime: string
+                readonly size: number
               }
           >
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
@@ -4636,6 +4674,14 @@ export type SessionMessageGetInput = {
 }
 
 export type SessionMessageGetOutput = { data: SessionMessageInfo }["data"]
+
+export type SessionArtifactInput = {
+  readonly sessionID: { readonly sessionID: string; readonly messageID: string; readonly key: string }["sessionID"]
+  readonly messageID: { readonly sessionID: string; readonly messageID: string; readonly key: string }["messageID"]
+  readonly key: { readonly sessionID: string; readonly messageID: string; readonly key: string }["key"]
+}
+
+export type SessionArtifactOutput = globalThis.Uint8Array
 
 export type SessionFormListInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 

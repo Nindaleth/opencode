@@ -778,6 +778,7 @@ const messageToText = (message: SessionMessage.Info): string => {
         .flatMap((part) => {
           if (part.type === "text") return [`[Assistant]: ${part.text}`]
           if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
+          if (part.type === "artifact") return []
 
           const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
           const call = `[Assistant tool call]: ${part.name}(${input})`

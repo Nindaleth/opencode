@@ -59,6 +59,25 @@ describe("acp session replay over the wire", () => {
     })
     expect(updates[11]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
   })
+
+  test("download metadata does not become an ACP tool call during replay", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_download", makeSession("ses_download"))
+    acp.server.messages.set("ses_download", [
+      assistantMessage("msg_download", {
+        content: [
+          { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+          { type: "text", text: "saved" },
+        ],
+      }),
+    ])
+    await acp.initialize()
+
+    await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_download", mcpServers: [] })
+
+    const updates = acp.updates.filter((item) => item.update.sessionUpdate !== "available_commands_update")
+    expect(updates.map((item) => item.update.sessionUpdate)).toEqual(["agent_message_chunk"])
+  })
 })
 
 function replayFixtureMessages(): Array<typeof SessionMessage.Info.Encoded> {

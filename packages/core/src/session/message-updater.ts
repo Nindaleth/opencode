@@ -354,6 +354,11 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 ...(event.data.metadata === undefined ? {} : { metadata: event.data.metadata }),
               }),
             )
+            draft.content.push(
+              ...(event.data.artifacts ?? []).map((ref) =>
+                castDraft(SessionMessage.AssistantArtifact.make({ type: "artifact", ...ref })),
+              ),
+            )
           }
         })
       },

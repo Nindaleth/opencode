@@ -9,6 +9,7 @@ import {
   ToolDisplay,
 } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import { ArtifactContent } from "./artifact-content"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 export { SessionShellMessage } from "../tools/tool-renderer"
@@ -94,6 +95,9 @@ export function SessionAssistantContent(props: {
             onContentRendered={props.onContentRendered}
           />
         )}
+      </Match>
+      <Match when={props.content.type === "artifact" ? props.content : undefined}>
+        {(content) => <ArtifactContent messageID={props.message.id} content={content()} />}
       </Match>
     </Switch>
   )

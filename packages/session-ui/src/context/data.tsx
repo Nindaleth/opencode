@@ -50,6 +50,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    onArtifactHref?: (sessionID: string, messageID: string, key: string) => string | undefined
   }) => {
     return {
       get store() {
@@ -63,6 +64,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      artifactHref: props.onArtifactHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
     }

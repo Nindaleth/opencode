@@ -1103,6 +1103,14 @@ export type SessionLogOutput =
                   }
               >,
             ]
+            readonly artifacts?:
+              | ReadonlyArray<{
+                  readonly key: string
+                  readonly name: string
+                  readonly mime: string
+                  readonly size: number
+                }>
+              | undefined
             readonly metadata?: { readonly [x: string]: Schema.Json } | undefined
             readonly executed: boolean
             readonly resultState?: SessionMessage.ProviderState | undefined
@@ -1384,6 +1392,16 @@ export type SessionMessageGetOperation<E = never> = (
   input: SessionMessageGetInput,
 ) => Effect.Effect<SessionMessageGetOutput, E>
 
+export type SessionArtifactInput = {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly key: string
+}
+export type SessionArtifactOutput = globalThis.Uint8Array
+export type SessionArtifactOperation<E = never> = (
+  input: SessionArtifactInput,
+) => Effect.Effect<SessionArtifactOutput, E>
+
 export type SessionFormListInput = { readonly sessionID: string }
 export type SessionFormListOutput = ReadonlyArray<Form.Info>
 export type SessionFormListOperation<E = never> = (
@@ -1484,6 +1502,7 @@ export interface SessionApi<E = never> {
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: { readonly get: SessionMessageGetOperation<E> }
+  readonly artifact: SessionArtifactOperation<E>
   readonly form: {
     readonly list: SessionFormListOperation<E>
     readonly create: SessionFormCreateOperation<E>

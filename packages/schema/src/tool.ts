@@ -5,6 +5,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
 import type { Session } from "./session.js"
 import type { SessionMessage } from "./session-message.js"
+import type { SessionArtifact } from "./session-artifact.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
@@ -87,6 +88,7 @@ export interface Result<Output extends ValueSchema<any> | undefined = ValueSchem
   readonly output?: OutputValue<Output>
   readonly content?: string | ReadonlyArray<Content>
   readonly metadata?: Metadata
+  readonly artifacts?: ReadonlyArray<SessionArtifact.Ref>
 }
 
 export type Info<

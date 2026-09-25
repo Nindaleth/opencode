@@ -91,7 +91,7 @@ export function projectedProviderMetrics(messages: readonly SessionMessageInfo[]
   )
   if (!message) return
   // Content is chronological; only a non-text head carries the first-output time.
-  const head = message.content[0]
+  const head = message.content.find((content) => content.type !== "artifact")
   const first = head && head.type !== "text" ? head.time?.created : undefined
   // Reasoning ends when the answer starts, so a reasoning part right before the first text
   // approximates the live `session.text.started` timestamp.

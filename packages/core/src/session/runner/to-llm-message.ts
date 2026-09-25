@@ -178,6 +178,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         : item.text.length > 0
           ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
           : []
+    if (item.type === "artifact") return []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.

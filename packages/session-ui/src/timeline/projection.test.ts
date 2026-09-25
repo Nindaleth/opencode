@@ -98,6 +98,59 @@ describe("Timeline.resolveContent", () => {
     })
     expect(Timeline.resolveContent(message, "first")).toBe(message.content[0])
   })
+
+  test("artifact IDs remain stable beside text and reasoning ordinals", () => {
+    const message = assistant([
+      { type: "text", text: "first" },
+      { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+      { type: "reasoning", text: "thinking" },
+      { type: "text", text: "last" },
+    ])
+    const entries = Timeline.contentEntries(message)
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "assistant:text:0",
+      "assistant:artifact:blob_report",
+      "assistant:reasoning:0",
+      "assistant:text:1",
+    ])
+    expect(Timeline.resolveContent(message, entries[1]!.id)).toBe(message.content[1])
+  })
+})
+
+test("downloadable artifacts remain visible when tools are hidden", () => {
+  const message: SessionMessageAssistant = {
+    id: "assistant",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [
+      {
+        type: "tool",
+        id: "call",
+        name: "mcp_read",
+        state: { status: "completed", input: {}, content: [{ type: "text", text: "done" }] },
+        time: { created: 0, completed: 1 },
+      },
+      { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+    ],
+    time: { created: 0 },
+  }
+  const rows = createTimelineProjection({
+    sessionMessages: [{ id: "user", type: "user", text: "download", time: { created: 0 } }, message],
+    status: { type: "idle" },
+    reasoningMode: "hidden",
+    timelineDetail: {
+      shell: { placement: "hidden", details: "collapsed" },
+      edit: { placement: "hidden", details: "collapsed" },
+      thinking: { placement: "hidden", details: "collapsed" },
+      subagents: { placement: "hidden" },
+      notices: { placement: "hidden" },
+      tools: { placement: "hidden" },
+    },
+  }).rows
+  expect(
+    rows.filter((row) => row._tag === "AssistantPart").map((row) => row._tag === "AssistantPart" && row.group.key),
+  ).toEqual(["part:assistant:assistant:artifact:blob_report"])
 })
 
 describe("reuseTimelineRows", () => {

@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
+import { SessionArtifact } from "./session-artifact.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
@@ -191,10 +192,19 @@ export const AssistantReasoning = Schema.Struct({
   }).pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Reasoning" })
 
-export const AssistantContent = Schema.Union([AssistantText, AssistantReasoning, AssistantTool]).pipe(
-  Schema.toTaggedUnion("type"),
-)
-export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool
+export interface AssistantArtifact extends Schema.Schema.Type<typeof AssistantArtifact> {}
+export const AssistantArtifact = Schema.Struct({
+  type: Schema.tag("artifact"),
+  ...SessionArtifact.Ref.fields,
+}).annotate({ identifier: "Session.Message.Assistant.Artifact" })
+
+export const AssistantContent = Schema.Union([
+  AssistantText,
+  AssistantReasoning,
+  AssistantTool,
+  AssistantArtifact,
+]).pipe(Schema.toTaggedUnion("type"))
+export type AssistantContent = AssistantText | AssistantReasoning | AssistantTool | AssistantArtifact
 
 export const AssistantContentEncoded = Schema.toEncoded(AssistantContent).annotate({
   identifier: "Session.Message.AssistantContent.Encoded",

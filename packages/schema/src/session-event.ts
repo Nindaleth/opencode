@@ -11,6 +11,7 @@ import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
 import { Location } from "./location.js"
 import { SessionMessage } from "./session-message.js"
+import { SessionArtifact } from "./session-artifact.js"
 import { Revert } from "./session-revert.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { SessionError } from "./session-error.js"
@@ -536,6 +537,7 @@ export namespace Tool {
     schema: {
       ...ToolBase,
       content: Schema.NonEmptyArray(Content),
+      artifacts: Schema.Array(SessionArtifact.Ref).pipe(optional),
       metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
       executed: Schema.Boolean,
       resultState: SessionMessage.ProviderState.pipe(optional),

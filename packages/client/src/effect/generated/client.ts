@@ -93,6 +93,8 @@ import type {
   SessionBackgroundOutput,
   SessionMessageGetInput,
   SessionMessageGetOutput,
+  SessionArtifactInput,
+  SessionArtifactOutput,
   SessionFormListInput,
   SessionFormListOutput,
   SessionFormCreateInput,
@@ -703,6 +705,13 @@ const EndpointSessionMessageGet = (raw: RawClient["server.session"]) => (input: 
     ),
   )
 
+const EndpointSessionArtifact = (raw: RawClient["server.session"]) => (input: SessionArtifactInput) =>
+  preserveEffect<SessionArtifactOutput>()(
+    raw["session.artifact"]({
+      params: { sessionID: input["sessionID"], messageID: input["messageID"], key: input["key"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointSessionFormList = (raw: RawClient["server.session"]) => (input: SessionFormListInput) =>
   preserveEffect<SessionFormListOutput>()(
     raw["session.form.list"]({ params: { sessionID: input["sessionID"] } }).pipe(
@@ -806,6 +815,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   interrupt: EndpointSessionInterrupt(raw),
   background: EndpointSessionBackground(raw),
   message: { get: EndpointSessionMessageGet(raw) },
+  artifact: EndpointSessionArtifact(raw),
   form: {
     list: EndpointSessionFormList(raw),
     create: EndpointSessionFormCreate(raw),

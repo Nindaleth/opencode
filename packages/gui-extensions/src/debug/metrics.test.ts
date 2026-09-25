@@ -88,3 +88,42 @@ test("derives a baseline from the latest completed projected request", () => {
   // Reasoning ended at 1_700, so TPS spans 1_700 → 3_800 = 100 / 2.1s.
   expect(projectedProviderMetrics(messages)).toEqual({ tps: 100 / 2.1, ttft: 300, ttfa: 700, e2e: 2_800 })
 })
+
+const tool = (created: number): SessionMessageAssistant["content"][number] => ({
+  type: "tool",
+  id: "call_1",
+  name: "read",
+  state: { status: "running", input: {}, metadata: {} },
+  time: { created, ran: created + 100 },
+})
+
+test("leaves text-first history unavailable until a live request", () => {
+  const unavailable = { tps: undefined, ttft: undefined, ttfa: undefined, e2e: 2_800 }
+  expect(projectedProviderMetrics([{ ...assistant, content: [{ type: "text", text: "Answer" }] }])).toEqual(unavailable)
+  expect(
+    projectedProviderMetrics([{ ...assistant, content: [{ type: "text", text: "Answer" }, tool(2_500)] }]),
+  ).toEqual(unavailable)
+})
+
+test("uses the first tool call as first output for tool-first history", () => {
+  expect(projectedProviderMetrics([{ ...assistant, content: [tool(1_800)] }])).toEqual({
+    tps: 50,
+    ttft: 800,
+    ttfa: undefined,
+    e2e: 2_800,
+  })
+})
+
+test("download metadata cannot become the first model-output timestamp", () => {
+  expect(
+    projectedProviderMetrics([
+      {
+        ...assistant,
+        content: [
+          { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+          tool(1_800),
+        ],
+      },
+    ]),
+  ).toEqual({ tps: 50, ttft: 800, ttfa: undefined, e2e: 2_800 })
+})

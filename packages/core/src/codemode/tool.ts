@@ -1,15 +1,8 @@
 export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Namespace, Tool, toolError } from "@opencode/codemode"
-import type {
-  Content,
-  Context,
-  Error,
-  Info,
-  Metadata,
-  Namespace as ToolNamespace,
-  Result,
-} from "@opencode/schema/tool"
+import type { SessionArtifact } from "@opencode/schema/session-artifact"
+import type { Content, Context, Error, Info, Metadata, Namespace as ToolNamespace, Result } from "@opencode/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -81,6 +74,7 @@ export const create = (
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
+        const artifacts = yield* Ref.make<Array<ReadonlyArray<SessionArtifact.Ref>>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
@@ -93,6 +87,8 @@ export const create = (
             Effect.gen(function* () {
               const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
               const executed = yield* executeTool(name, tool, input, context)
+              const generated = executed.artifacts
+              if (generated?.length) yield* Ref.update(artifacts, (items) => [...items, generated])
               const content =
                 typeof executed.content === "string"
                   ? [{ type: "text" as const, text: executed.content }]
@@ -107,6 +103,7 @@ export const create = (
           progressHooks(record),
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
+        const generated = (yield* Ref.get(artifacts)).flat()
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
@@ -134,6 +131,7 @@ export const create = (
           output: value,
           content,
           metadata,
+          ...(generated.length === 0 ? {} : { artifacts: generated }),
         }
       }),
   } satisfies Info

@@ -392,6 +392,7 @@ export function reduceSessionRows(
     usage?.steps.push(message)
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
+      if (part.type === "artifact") return
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
       rows.push({

@@ -264,6 +264,7 @@ const source = {
   "ui.sessionTimeline.notice.restart": "Continuing after restart",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
+  "ui.message.artifact.download": "Download file",
 
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",

@@ -146,6 +146,7 @@ const layer = Layer.effect(
           ...(execution.value.output === undefined ? {} : { output: execution.value.output }),
           content: execution.value.content,
           ...(execution.value.metadata === undefined ? {} : { metadata: execution.value.metadata }),
+          ...(execution.value.artifacts === undefined ? {} : { artifacts: execution.value.artifacts }),
         },
       }
       yield* hooks.trigger("tool", "execute.after", afterEvent)
@@ -154,6 +155,7 @@ const layer = Layer.effect(
         ...(afterEvent.result.output === undefined ? {} : { output: afterEvent.result.output }),
         content: afterContent,
         ...(afterEvent.result.metadata === undefined ? {} : { metadata: afterEvent.result.metadata }),
+        ...(afterEvent.result.artifacts === undefined ? {} : { artifacts: afterEvent.result.artifacts }),
       }
     })
 

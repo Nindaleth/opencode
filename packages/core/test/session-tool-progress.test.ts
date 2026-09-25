@@ -17,6 +17,9 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionTable, SessionMessageTable } from "@opencode/core/session/sql"
+import { createLLMEventPublisher } from "@opencode/core/session/runner/publish-llm-event"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
+import { LLMEvent } from "@opencode/ai"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -29,6 +32,59 @@ const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provid
 const content = (text: string) => [{ type: "text" as const, text }] as const
 
 describe("Session tool progress", () => {
+  it.effect("MCP downloads project as independent assistant content without entering model history", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_artifact_projection")
+      yield* database.db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* database.db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "artifact",
+          directory: "/project",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const assistantMessageID = SessionMessage.ID.create()
+      const publisher = createLLMEventPublisher(bus, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model,
+        providerMetadataKey: "opencode",
+        started: 0,
+      })
+      yield* publisher.publish(LLMEvent.toolCall({ id: "binary", name: "download", input: {} }))
+      yield* publisher.toolExecution("binary", "download", {
+        output: "zip",
+        content: [{ type: "text", text: "Download available" }],
+        artifacts: [{ key: "blob_123", name: "report.zip", mime: "application/zip", size: 5 }],
+      })
+      const row = yield* database.db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* Effect.die("Missing projected assistant")
+      const message = Schema.decodeUnknownSync(SessionMessage.Assistant)({ ...row.data, id: row.id, type: row.type })
+      expect(message.content).toMatchObject([
+        { type: "tool", state: { status: "completed", content: [{ type: "text", text: "Download available" }] } },
+        { type: "artifact", key: "blob_123", name: "report.zip", mime: "application/zip", size: 5 },
+      ])
+      expect(JSON.stringify(toLLMMessages([message], model))).not.toContain("blob_123")
+    }),
+  )
+
   it.effect("keeps progress live-only and terminal settlements durable", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
