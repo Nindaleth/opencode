@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
+import { ArtifactContent } from "../../message/artifact-content"
 import { AssistantTextContent } from "../../message/message-content"
 import {
   currentToolError,
@@ -30,6 +31,9 @@ export function AssistantContent(props: {
 }) {
   return (
     <Switch>
+      <Match when={props.content.type === "artifact" ? props.content : undefined}>
+        {(content) => <ArtifactContent messageID={props.message.id} content={content()} />}
+      </Match>
       <Match when={props.content.type === "text" ? props.content : undefined}>
         {(content) => (
           <AssistantTextContent

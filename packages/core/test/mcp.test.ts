@@ -41,6 +41,7 @@ import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionArtifact } from "@opencode/core/session/artifact"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { Command } from "@opencode/core/command"
@@ -81,7 +82,7 @@ import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
   codeModeListings,
@@ -272,6 +273,21 @@ function resourceServer(
                 return Promise.resolve(inputRequired({ inputRequests: { roots: inputRequired.listRoots() } }))
               return Promise.resolve({ content: [], structuredContent: inputResponse(responses, "roots") })
             }
+            if (request.params.name === "binary")
+              return Promise.resolve({
+                content: [
+                  { type: "text" as const, text: "created" },
+                  {
+                    type: "resource" as const,
+                    resource: {
+                      uri: "report://latest/report.zip",
+                      name: "report.zip",
+                      blob: "aGVsbG8=",
+                      mimeType: "application/zip",
+                    },
+                  },
+                ],
+              })
             state.toolCalls.push({
               name: request.params.name,
               arguments: request.params.arguments,
@@ -691,6 +707,150 @@ test("passes session IDs as MCP request metadata", async () => {
     ),
   )
 })
+
+test("embedded MCP binary resources retain their URI", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const connection = yield* connect(
+          "binary",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+          import.meta.dir,
+        )
+        expect((yield* connection.callTool({ name: "binary" })).content).toEqual([
+          { type: "text", text: "created" },
+          {
+            type: "media",
+            data: "aGVsbG8=",
+            mimeType: "application/zip",
+            uri: "report://latest/report.zip",
+          },
+        ])
+      }),
+    ),
+  )
+})
+
+testEffect(Layer.empty).live(
+  "MCP binary attachments offer downloads without exposing unsupported bytes to the model",
+  () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const registration = yield* McpTool.Service
+        const artifact = yield* SessionArtifact.Service
+        yield* registration.flush
+        const execution = yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_artifact"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call_artifact", name: "binary_download", input: {} },
+        })
+        expect(execution.status).toBe("completed")
+        expect(execution.content).toEqual([
+          { type: "text", text: "created" },
+          { type: "text", text: expect.stringContaining("report.zip") },
+          { type: "file", mime: "application/pdf", uri: "data:application/pdf;base64,aGVsbG8=", name: "report.pdf" },
+        ])
+        expect(execution.content?.some((item) => item.type === "file" && item.mime === "application/zip")).toBe(false)
+        expect(execution.artifacts?.map((ref) => [ref.name, ref.mime])).toEqual([
+          ["report.zip", "application/zip"],
+          ["report.pdf", "application/pdf"],
+        ])
+        expect(yield* artifact.read(Session.ID.make("ses_mcp_artifact"), execution.artifacts![0]!.key)).toEqual(
+          new TextEncoder().encode("hello"),
+        )
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, SessionArtifact.node]), [
+            Mcp.node.replace(
+              Layer.mock(Mcp.Service, {
+                awaitStartup: () => Effect.void,
+                tools: () =>
+                  Effect.succeed([
+                    {
+                      server: Mcp.ServerName.make("binary"),
+                      name: "download",
+                      codemode: false,
+                      inputSchema: { type: "object" },
+                    },
+                  ]),
+                callTool: () =>
+                  Effect.succeed({
+                    server: Mcp.ServerName.make("binary"),
+                    tool: "download",
+                    isError: false,
+                    content: [
+                      { type: "text", text: "created" },
+                      {
+                        type: "media",
+                        data: "aGVsbG8=",
+                        mimeType: "application/zip",
+                        name: "../../report.zip",
+                        uri: "report://latest",
+                      },
+                      { type: "media", data: "aGVsbG8=", mimeType: "application/pdf", name: "report.pdf" },
+                    ],
+                  }),
+              }),
+            ),
+            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            Global.node.replace(Global.layerWith({ data: tmp.path })),
+          ]),
+        ),
+      ),
+    ),
+)
+
+for (const [label, data] of [
+  ["malformed", "not-base64"],
+  ["oversize", "YQ==".repeat(4 * 1024 * 1024)],
+] as const) {
+  testEffect(Layer.empty).live(`MCP ${label} binary attachments are omitted without saving`, () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const registration = yield* McpTool.Service
+        yield* registration.flush
+        const result = yield* executeTool(yield* Tool.Service, {
+          sessionID: Session.ID.make("ses_mcp_invalid"),
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call_invalid", name: "binary_download", input: {} },
+        })
+        expect(result.artifacts).toBeUndefined()
+        expect(result.content).toEqual([{ type: "text", text: expect.stringContaining("omitted") }])
+        expect(yield* Effect.promise(() => fs.readdir(path.join(tmp.path, "blob")).catch(() => []))).toEqual([])
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, SessionArtifact.node]), [
+            Mcp.node.replace(
+              Layer.mock(Mcp.Service, {
+                awaitStartup: () => Effect.void,
+                tools: () =>
+                  Effect.succeed([
+                    {
+                      server: Mcp.ServerName.make("binary"),
+                      name: "download",
+                      codemode: false,
+                      inputSchema: { type: "object" },
+                    },
+                  ]),
+                callTool: () =>
+                  Effect.succeed({
+                    server: Mcp.ServerName.make("binary"),
+                    tool: "download",
+                    isError: false,
+                    content: [{ type: "media", data, mimeType: "application/zip", name: "invalid.zip" }],
+                  }),
+              }),
+            ),
+            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            Global.node.replace(Global.layerWith({ data: tmp.path })),
+          ]),
+        ),
+      ),
+    ),
+  )
+}
 
 test("preserves output schema validation across paginated tool discovery", async () => {
   const server = new Server({ name: "pagination", version: "1.0.0" }, { capabilities: { tools: {} } })

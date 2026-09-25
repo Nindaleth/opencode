@@ -1134,8 +1134,11 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.tool.success":
-        message.editTool(event.data.sessionID, event.data.assistantMessageID, event.data.id, (tool) => {
-          if (tool.state.status !== "running") return
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          const tool = assistant.content.findLast(
+            (item): item is SessionMessageAssistantTool => item.type === "tool" && item.id === event.data.id,
+          )
+          if (tool?.state.status !== "running") return
           tool.state = {
             status: "completed",
             input: tool.state.input,
@@ -1145,6 +1148,7 @@ export function createData(config: CreateDataInput) {
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
           tool.time.completed = event.created
+          assistant.content.push(...(event.data.artifacts ?? []).map((ref) => ({ type: "artifact" as const, ...ref })))
         })
         return
       case "session.tool.failed":

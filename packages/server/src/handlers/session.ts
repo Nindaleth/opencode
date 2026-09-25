@@ -1,5 +1,6 @@
 import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
+import { SessionArtifact } from "@opencode/core/session/artifact"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -37,6 +38,7 @@ function missingForm(id: Form.ID) {
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const artifacts = yield* SessionArtifact.Service
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
@@ -636,6 +638,33 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             sessionID: ctx.params.sessionID,
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
+          })
+        }),
+      )
+      .handleRaw("session.artifact", (ctx) =>
+        Effect.gen(function* () {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          const message = yield* session.message({
+            sessionID: ctx.params.sessionID,
+            messageID: ctx.params.messageID,
+          })
+          const missing = () =>
+            new MessageNotFoundError({
+              sessionID: ctx.params.sessionID,
+              messageID: ctx.params.messageID,
+              message: `Artifact not found: ${ctx.params.key}`,
+            })
+          const ref =
+            message?.type === "assistant"
+              ? message.content.find((content) => content.type === "artifact" && content.key === ctx.params.key)
+              : undefined
+          if (!ref || ref.type !== "artifact") return yield* missing()
+          const bytes = yield* artifacts.read(ctx.params.sessionID, ref.key).pipe(Effect.catch(() => missing()))
+          return HttpServerResponse.uint8Array(bytes, {
+            contentType: ref.mime,
+            headers: {
+              "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(ref.name)}`,
+            },
           })
         }),
       )

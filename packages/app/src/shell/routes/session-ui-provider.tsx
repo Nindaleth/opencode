@@ -17,6 +17,8 @@ import { SessionExportProvider } from "@/session/commands/export-session"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
 import { SessionReferenceMenu, type SessionReferenceMenuTarget } from "@/session/session-reference-menu"
 import { useSettings } from "@/settings/model"
+import { usePlatform } from "@/runtime/platform/platform"
+import { sessionArtifactUrl } from "./session-artifact-url"
 import {
   INITIAL_SESSION_UI_NAVIGATE_STATE,
   transitionSessionUINavigate,
@@ -44,6 +46,7 @@ export function SessionUIProvider(
   const tabs = useTabs()
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
   const directory = () => props.directory
 
   const readImage = createMemo<ReadMarkdownImage>(() => {
@@ -177,7 +180,13 @@ export function SessionUIProvider(
       )
   }
 
-  createEffect(on(() => props.server, () => dispatchReferenceLookup({ type: "server.changed" }), { defer: true }))
+  createEffect(
+    on(
+      () => props.server,
+      () => dispatchReferenceLookup({ type: "server.changed" }),
+      { defer: true },
+    ),
+  )
   onCleanup(() => dispatchReferenceLookup({ type: "disposed" }))
 
   const sessionTitle = (id: string) => {
@@ -245,6 +254,18 @@ export function SessionUIProvider(
         turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
+        onArtifactHref={
+          platform.platform === "web"
+            ? (sessionID, messageID, key) =>
+                sessionArtifactUrl({
+                  url: serverSDK.url,
+                  password: serverSDK.http.password,
+                  sessionID,
+                  messageID,
+                  key,
+                })
+            : undefined
+        }
       >
         <MarkdownProvider
           readImage={readImage()}

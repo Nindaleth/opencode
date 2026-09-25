@@ -79,6 +79,7 @@ export const {
     peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    onArtifactHref?: (sessionID: string, messageID: string, key: string) => string | undefined
   }) => {
     return {
       get store() {
@@ -95,6 +96,7 @@ export const {
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      artifactHref: props.onArtifactHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
       get turnDiff() {

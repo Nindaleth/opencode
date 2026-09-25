@@ -30,6 +30,7 @@ import { StepFailedError } from "../error.js"
 import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { PersistentPty } from "../../persistent-pty/index.js"
+import { SessionArtifact } from "../artifact.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { PluginHooks } from "../../plugin/hooks.js"
@@ -465,6 +466,7 @@ export const node = makeLocationNode({
     Snapshot.node,
     PersistentPty.node,
     ToolOutput.node,
+    SessionArtifact.node,
     Database.node,
   ],
 })

@@ -2,6 +2,7 @@ export * as CodeModeTool from "./tool.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import type { SessionArtifact } from "@opencode/schema/session-artifact"
 import type {
   Content,
   Context as ToolContext,
@@ -103,6 +104,7 @@ export const create = (
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
+        const artifacts = yield* Ref.make<Array<ReadonlyArray<SessionArtifact.Ref>>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
@@ -150,6 +152,8 @@ export const create = (
                   }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
+                  const generated = executed.artifacts
+                  if (generated?.length) yield* Ref.update(artifacts, (items) => [...items, generated])
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
@@ -168,6 +172,7 @@ export const create = (
             (program) => (location ? Effect.provideService(program, Location.Service, location) : program),
           )
         const toolCalls = yield* Ref.get(calls)
+        const generated = (yield* Ref.get(artifacts)).flat()
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
@@ -195,6 +200,7 @@ export const create = (
           output: value,
           content,
           metadata,
+          ...(generated.length === 0 ? {} : { artifacts: generated }),
         }
       }).pipe(Effect.scoped),
   } satisfies Info

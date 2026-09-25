@@ -119,7 +119,9 @@ export function createNextTimelineProjection(input: {
       input
         .sessionMessages()
         .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+          message.type === "assistant"
+            ? message.content.filter((content) => content.type === "text" || content.type === "reasoning")
+            : [],
         ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
@@ -145,7 +147,7 @@ export function createNextTimelineProjection(input: {
       queuedCompactionIDs: input.queuedCompactionIDs?.() ?? [],
       turnDiffs: input.turnDiffs?.() ?? false,
       shows: (content) =>
-        content.type === "tool"
+        content.type === "tool" || content.type === "artifact"
           ? contentShows(detail, content)
           : (content.type === "text" || detail.thinking.placement !== "hidden") && textVisible().get(content)!(),
     })
@@ -226,7 +228,9 @@ export function workedDuration(user: SessionMessageUser | undefined, steps: read
     Math.max(
       stopped.time.created,
       ...stopped.content.flatMap((content) =>
-        content.type === "text" ? [] : [content.time?.completed ?? content.time?.created ?? stopped.time.created],
+        content.type === "text" || content.type === "artifact"
+          ? []
+          : [content.time?.completed ?? content.time?.created ?? stopped.time.created],
       ),
     )
 
@@ -241,7 +245,7 @@ export function resolveContent(message: SessionMessageInfo | undefined, partID: 
 }
 
 export function contentEntries(message: SessionMessageAssistant) {
-  const ordinals = { text: 0, reasoning: 0 }
+  const ordinals = { text: 0, reasoning: 0, artifact: 0 }
 
   return message.content.map((content) => ({
     id: content.type === "tool" ? content.id : `${message.id}:${content.type}:${ordinals[content.type]++}`,
@@ -484,7 +488,8 @@ function turnRows(
     const appendGroups = (items: typeof refs) => {
       let offset = 0
       groupContent(items, detail, commentary).forEach((group) => {
-        const tool = group.type !== "part" || items[offset]?.content.type !== "text"
+        const type = items[offset]?.content.type
+        const tool = group.type !== "part" || (type !== "text" && type !== "artifact")
         offset += group.type === "part" ? 1 : group.refs.length
         rows.push(
           new TimelineRow.AssistantPart({

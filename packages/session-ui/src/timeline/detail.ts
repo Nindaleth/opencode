@@ -105,6 +105,7 @@ export function timelineCategory(
 
   if (content.type === "reasoning") return "thinking"
 
+  if (content.type === "artifact") return
   if (["shell", "execute", "bash"].includes(content.name)) return "shell"
 
   if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"

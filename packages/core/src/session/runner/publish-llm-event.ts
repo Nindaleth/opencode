@@ -590,6 +590,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       assistantMessageID,
       id,
       content,
+      ...(result.artifacts === undefined ? {} : { artifacts: result.artifacts }),
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
       executed: tool.providerExecuted,
     })
