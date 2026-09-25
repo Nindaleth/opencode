@@ -20,7 +20,6 @@ import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
 import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
-import { SessionArtifact } from "../artifact.js"
 import { SessionMessage } from "../message.js"
 import { SessionModelRequest } from "../model-request.js"
 import { SessionSchema } from "../schema.js"
@@ -69,7 +68,6 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
-  const artifacts = yield* SessionArtifact.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     const startSnapshot = yield* snapshots.capture()
@@ -122,11 +120,7 @@ export const make = Effect.gen(function* () {
             fiber: yield* Effect.uninterruptibleMask((restore) =>
               restore(executeTool(event)).pipe(
                 Effect.flatMap(toolOutput.truncate),
-                Effect.flatMap((outcome) =>
-                  publisher
-                    .toolExecution(event.id, event.name, outcome)
-                    .pipe(Effect.ensuring(artifacts.settle(outcome.artifacts?.map((artifact) => artifact.key) ?? []))),
-                ),
+                Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
                 Effect.catchTag("Tool.Error", (error) =>
                   publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid),
                 ),

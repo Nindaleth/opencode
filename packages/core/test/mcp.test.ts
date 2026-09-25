@@ -621,7 +621,9 @@ testEffect(Layer.empty).live(
           ["report.zip", "application/zip"],
           ["report.pdf", "application/pdf"],
         ])
-        expect(yield* artifact.read(execution.artifacts![0]!.key)).toEqual(new TextEncoder().encode("hello"))
+        expect(yield* artifact.read(Session.ID.make("ses_mcp_artifact"), execution.artifacts![0]!.key)).toEqual(
+          new TextEncoder().encode("hello"),
+        )
       }).pipe(
         Effect.provide(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, SessionArtifact.node]), [

@@ -130,7 +130,7 @@ export const layer = Layer.effect(
                             type: "text" as const,
                             text: `[Binary MCP attachment ${filename} omitted: exceeds 10 MB]`,
                           }
-                        const stored = yield* artifacts.write({ name: filename, mime, bytes }).pipe(
+                        const stored = yield* artifacts.write(context.sessionID, { name: filename, mime, bytes }).pipe(
                           Effect.tap((ref) =>
                             Effect.sync(() => {
                               refs.push(ref)

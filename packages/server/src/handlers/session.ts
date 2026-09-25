@@ -663,7 +663,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ? message.content.find((content) => content.type === "artifact" && content.key === ctx.params.key)
               : undefined
           if (!ref || ref.type !== "artifact") return yield* missing()
-          const bytes = yield* artifacts.read(ref.key).pipe(Effect.catch(() => missing()))
+          const bytes = yield* artifacts.read(ctx.params.sessionID, ref.key).pipe(Effect.catch(() => missing()))
           return HttpServerResponse.uint8Array(bytes, {
             contentType: ref.mime,
             headers: {

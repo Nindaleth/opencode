@@ -39,7 +39,7 @@ it.live("Artifact downloads were accessible from unrelated sessions and messages
     const first = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
     const second = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
     const messageID = SessionMessage.ID.create()
-    const ref = yield* artifacts.write({
+    const ref = yield* artifacts.write(first.id, {
       name: "annual report.zip",
       mime: "application/zip",
       bytes: Uint8Array.of(0, 42, 255),
@@ -90,10 +90,40 @@ it.live("Artifact downloads were accessible from unrelated sessions and messages
     expect(owned.headers.get("content-disposition")).toContain("annual%20report.zip")
     expect(new Uint8Array(yield* Effect.promise(() => owned.arrayBuffer()))).toEqual(Uint8Array.of(0, 42, 255))
     expect((yield* fetch(second.id, messageID, ref.key)).status).toBe(404)
+    const secondMessageID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Step.Started, {
+      sessionID: second.id,
+      assistantMessageID: secondMessageID,
+      agent: Agent.defaultID,
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+      started: 0,
+    })
+    yield* bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID: second.id,
+      assistantMessageID: secondMessageID,
+      id: "call-2",
+      name: "server_tool",
+    })
+    yield* bus.publish(SessionEvent.Tool.Called, {
+      sessionID: second.id,
+      assistantMessageID: secondMessageID,
+      id: "call-2",
+      input: {},
+      executed: false,
+    })
+    yield* bus.publish(SessionEvent.Tool.Success, {
+      sessionID: second.id,
+      assistantMessageID: secondMessageID,
+      id: "call-2",
+      content: [{ type: "text", text: "download" }],
+      artifacts: [ref],
+      executed: false,
+    })
+    expect((yield* fetch(second.id, secondMessageID, ref.key)).status).toBe(404)
     expect((yield* fetch(first.id, SessionMessage.ID.create(), ref.key)).status).toBe(404)
     expect((yield* fetch(first.id, messageID, "blob_unknown")).status).toBe(404)
     expect((yield* fetch(Session.ID.create(), messageID, ref.key)).status).toBe(404)
-    yield* Effect.promise(() => Bun.file(`${tmp.path}/blob/${ref.key}`).delete())
+    yield* Effect.promise(() => Bun.file(`${tmp.path}/blob/${first.id}/${ref.key}`).delete())
     expect((yield* fetch(first.id, messageID, ref.key)).status).toBe(404)
   }).pipe(Effect.scoped),
 )
