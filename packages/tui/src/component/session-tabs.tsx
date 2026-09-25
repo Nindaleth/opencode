@@ -1515,10 +1515,11 @@ function HorizontalSessionTabs(props: {
   return (
     <box
       ref={(element) => (strip = element)}
-      height={1}
+      height={3}
       flexShrink={0}
       position="relative"
       flexDirection="row"
+      alignItems="center"
       zIndex={1}
       onMouseOut={(event) => {
         marquee.leaveHovered()
@@ -1633,8 +1634,10 @@ function HorizontalSessionTabs(props: {
           return (
             <box
               width={width()}
+              height={3}
               position="relative"
               flexDirection="row"
+              alignItems="center"
               backgroundColor={background()}
               onMouseOver={() => marquee.enter(tab.sessionID, title(), hoveredTitleWidth())}
               onMouseOut={() => marquee.leave(tab.sessionID)}
@@ -1669,6 +1672,7 @@ function HorizontalSessionTabs(props: {
               }}
             >
               <TabPulse
+                top={1}
                 enabled={animations()}
                 active={status().busy && !status().attention}
                 promptPulse={status().promptPulse}
@@ -1681,7 +1685,7 @@ function HorizontalSessionTabs(props: {
                 backgroundColor={background()}
                 onLevel={setSweepLevel}
               />
-              <box zIndex={1} width="100%" flexDirection="row">
+              <box zIndex={1} width="100%" height={1} flexDirection="row">
                 <TabIndicator
                   status={status()}
                   label={tab === NEW_SESSION_TAB ? "+" : sessionTabNumberLabel(tabNumber() - 1)}
