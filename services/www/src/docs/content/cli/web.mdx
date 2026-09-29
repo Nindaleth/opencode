@@ -62,6 +62,20 @@ Changing a setting stops the background server. To apply the new config
 $ opencode service start
 ```
 
+### Passwordless access
+
+On a trusted network, you can explicitly disable authentication for the managed service:
+
+```bash
+$ opencode service set hostname 0.0.0.0
+$ opencode service set passwordless true
+$ opencode service start
+```
+
+Open the server URL directly in a browser. Anyone who can reach the server can also use its API and tools without signing in. Restrict access at the network boundary; CORS is not an access-control mechanism.
+
+To require a password again, run `opencode service set passwordless false` and then `opencode service start`.
+
 ## Standalone
 
 `opencode serve` runs the same server in the foreground instead of through the
@@ -87,3 +101,11 @@ Connect a client to it with `--server`:
 ```bash
 $ opencode --server http://127.0.0.1:4096
 ```
+
+For a standalone server on a trusted network, add `--passwordless`:
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096 --passwordless
+```
+
+Without this flag, standalone servers remain password protected.

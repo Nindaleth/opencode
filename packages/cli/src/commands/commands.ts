@@ -557,6 +557,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         service: Flag.boolean("service").pipe(Flag.withDefault(false)),
         stdio: Flag.boolean("stdio").pipe(Flag.withDefault(false)),
+        passwordless: Flag.boolean("passwordless").pipe(
+          Flag.withDescription("Allow unauthenticated access to the foreground server"),
+          Flag.withDefault(false),
+        ),
       },
     }),
   ],

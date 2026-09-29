@@ -4,6 +4,26 @@ import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
+it.live("serves the API without credentials when no password is configured", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const base = HttpServer.formatAddress(server.address)
+    const info = yield* Effect.promise(() => fetch(new URL("/api/info", base)))
+    expect(info.status).toBe(200)
+    expect(info.headers.get("www-authenticate")).toBeNull()
+    expect(yield* Effect.promise(() => info.json())).toMatchObject({ version: "test-version" })
+
+    const projects = yield* Effect.promise(() => fetch(new URL("/api/project", base)))
+    expect(projects.status).toBe(200)
+    yield* Effect.promise(() => projects.arrayBuffer())
+  }),
+)
+
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
     const fallback = "fallback".repeat(256)
