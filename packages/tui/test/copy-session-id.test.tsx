@@ -7,6 +7,14 @@ import { createEventStream, createFetch, directory, json } from "./fixture/tui-c
 import { tmpdir } from "./fixture/fixture"
 
 test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", async (mode) => {
+  const waylandDisplay = process.env.WAYLAND_DISPLAY
+  using environment = {
+    [Symbol.dispose]() {
+      if (waylandDisplay === undefined) delete process.env.WAYLAND_DISPLAY
+      else process.env.WAYLAND_DISPLAY = waylandDisplay
+    },
+  }
+  if (mode === "failure") delete process.env.WAYLAND_DISPLAY
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()

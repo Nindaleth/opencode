@@ -11,15 +11,42 @@ import type { ClipboardContent, ClipboardService } from "./context/clipboard"
 export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
 
 export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedClipboardService {
+  const host = createHostClipboard()
+  const wayland = process.env.WAYLAND_DISPLAY ? Bun.which("wl-copy") : null
   return createClipboardAdapter(
     createClipboard({
-      host: createHostClipboard(),
+      host: wayland
+        ? {
+            ...host,
+            async writeText(text, options) {
+              const result = await host.writeText(text, options)
+              if (result.status !== "unsupported" || options?.selection === "primary") return result
+              try {
+                const process = Bun.spawn([wayland, "--type", "text/plain"], {
+                  stdin: "pipe",
+                  stdout: "ignore",
+                  stderr: "pipe",
+                })
+                process.stdin.write(text)
+                process.stdin.end()
+                if ((await process.exited) === 0) return { status: "written" }
+                return { status: "failed", error: new Error(await new Response(process.stderr).text()) }
+              } catch (error) {
+                return { status: "failed", error: error instanceof Error ? error : new Error(String(error)) }
+              }
+            },
+          }
+        : host,
       terminal: createRendererClipboardAdapter(renderer),
     }),
+    !!wayland,
   )
 }
 
-export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedClipboardService {
+export function createClipboardAdapter(
+  clipboard: CoreClipboardService,
+  allowRemoteHost = false,
+): OwnedClipboardService {
   return {
     async read(): Promise<ClipboardContent | undefined> {
       const result = await clipboard.read({
@@ -55,6 +82,7 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       const result = await clipboard.writeText(text.replaceAll("\0", ""), {
         destination: "all-available",
         selection: "clipboard",
+        ...(allowRemoteHost ? { allowRemoteHost: true } : {}),
       })
       if (result.host.status === "written" || result.terminal.status === "attempted") return
       if (result.host.status === "failed") throw result.host.error
