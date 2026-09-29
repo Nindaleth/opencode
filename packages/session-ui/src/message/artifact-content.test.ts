@@ -9,7 +9,7 @@ const artifact = {
   size: 2048,
 }
 
-test("web artifacts expose a filename, size, and download URL", () => {
+test("web artifacts expose a file icon, filename, size, and download URL", () => {
   const presentation = artifactPresentation(
     artifact,
     "session",
@@ -17,6 +17,7 @@ test("web artifacts expose a filename, size, and download URL", () => {
     (sessionID, messageID, key) => `/api/session/${sessionID}/message/${messageID}/artifact/${key}`,
   )
   expect(presentation).toEqual({
+    icon: { path: "report.zip", type: "file" },
     name: "report.zip",
     size: "2 KB",
     href: "/api/session/session/message/assistant/artifact/blob_report",
@@ -25,6 +26,7 @@ test("web artifacts expose a filename, size, and download URL", () => {
 
 test("desktop artifacts have no download URL", () => {
   expect(artifactPresentation(artifact, "session", "assistant")).toEqual({
+    icon: { path: "report.zip", type: "file" },
     name: "report.zip",
     size: "2 KB",
     href: undefined,

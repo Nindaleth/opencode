@@ -126,6 +126,76 @@ test("reconciles a stale running tool when execution settles", async () => {
   }
 })
 
+test("shows tool artifacts in the live message without a refresh", async () => {
+  // Tool artifacts were persisted but absent from the live transcript until a reload.
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1 },
+            content: [
+              {
+                type: "tool",
+                id: "call_execute",
+                name: "execute",
+                time: { created: 1, ran: 2 },
+                state: { status: "running", input: {}, metadata: {} },
+              },
+            ],
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const succeeded: OpenCodeEvent = {
+      id: "evt_tool_success",
+      created: 3,
+      type: "session.tool.success",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_assistant",
+        id: "call_execute",
+        executed: true,
+        content: [],
+        artifacts: [{ key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 }],
+      },
+    }
+    listeners.forEach((listener) => listener({ name: succeeded.type, details: succeeded }))
+    listeners.forEach((listener) => listener({ name: succeeded.type, details: succeeded }))
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_assistant")?.content).toEqual([
+      expect.objectContaining({ type: "tool", state: expect.objectContaining({ status: "completed" }) }),
+      { type: "artifact", key: "blob_report", name: "report.zip", mime: "application/zip", size: 2048 },
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

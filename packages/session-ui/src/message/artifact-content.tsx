@@ -1,4 +1,5 @@
 import type { SessionMessageAssistantArtifact } from "@opencode/client/promise"
+import { FileIcon } from "@opencode/ui/file-icon"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Show } from "solid-js"
 import { useData } from "../context"
@@ -16,7 +17,12 @@ export function artifactPresentation(
       : bytes < 1024 * 1024
         ? `${Math.round(bytes / 1024)} KB`
         : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return { name: content.name, size, href: sessionID ? href?.(sessionID, messageID, content.key) : undefined }
+  return {
+    icon: { path: content.name, type: "file" as const },
+    name: content.name,
+    size,
+    href: sessionID ? href?.(sessionID, messageID, content.key) : undefined,
+  }
 }
 
 export function ArtifactContent(props: { messageID: string; content: SessionMessageAssistantArtifact }) {
@@ -25,6 +31,7 @@ export function ArtifactContent(props: { messageID: string; content: SessionMess
   const presentation = () => artifactPresentation(props.content, data.sessionID, props.messageID, data.artifactHref)
   return (
     <div class="flex items-center gap-3 rounded-md border border-border-base px-3 py-2 text-13 leading-[var(--line-height-compact)]">
+      <FileIcon node={presentation().icon} class="size-5 shrink-0" aria-hidden="true" />
       <div class="min-w-0 flex-1">
         <div class="truncate">{presentation().name}</div>
         <div class="text-text-weak">{presentation().size}</div>
