@@ -55,7 +55,7 @@ const VIEW_RETRY_MAX_DELAY = 5_000
 
 export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimpleContext({
   name: "SessionTabs",
-  init: () => {
+  init: (props: { onLastClose?: () => void }) => {
     const route = useRoute()
     const client = useClient()
     const data = useData()
@@ -417,7 +417,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           ),
         })
       },
-      close(sessionID?: string) {
+      close(sessionID?: string, options?: { exitOnLast?: boolean }) {
         if (!enabled()) return
         const target = sessionID ? root(sessionID) : current()
         if (!target) {
@@ -425,12 +425,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           history = previous.history
           const session = previous.sessionID ?? state().tabs.at(-1)?.sessionID
           if (route.data.type === "home" && session) route.navigate({ type: "session", sessionID: session })
+          if (route.data.type === "home" && !session && options?.exitOnLast !== false) props.onLastClose?.()
           return
         }
         const index = state().tabs.findIndex((tab) => tab.sessionID === target)
         const tab = state().tabs[index]
         if (tab) setClosedTabs((entries) => recordClosedSessionTab(entries, tab, index))
+        const last = tab && state().tabs.length === 1 && route.data.type !== "home"
         remove(target, true)
+        if (last && options?.exitOnLast !== false) props.onLastClose?.()
       },
       reopen(sessionID?: string) {
         if (!enabled()) return

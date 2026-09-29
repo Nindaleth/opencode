@@ -1262,7 +1262,7 @@ export function Prompt(props: PromptProps) {
           saveDraft(undefined, draft)
           active?.reset()
           if (sessionTabs.enabled()) {
-            sessionTabs.close(created.id)
+            sessionTabs.close(created.id, { exitOnLast: false })
           } else if (route.data.type === "session" && route.data.sessionID === created.id) {
             route.navigate({ type: "home" })
           }

@@ -29,6 +29,7 @@ import {
   onCleanup,
   batch,
   Show,
+  type ParentProps,
 } from "solid-js"
 import {
   TuiLifecycleProvider,
@@ -374,7 +375,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               <PermissionProvider>
                                                 <DataProvider directory={directory}>
                                                   <LocationProvider>
-                                                    <SessionTabsProvider>
+                                                    <SessionTabsWithExit>
                                                       <SessionTerminalsProvider>
                                                         <ThemeProvider
                                                           mode={mode}
@@ -411,7 +412,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           </LocalProvider>
                                                         </ThemeProvider>
                                                       </SessionTerminalsProvider>
-                                                    </SessionTabsProvider>
+                                                    </SessionTabsWithExit>
                                                   </LocationProvider>
                                                 </DataProvider>
                                               </PermissionProvider>
@@ -449,6 +450,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
 })
+
+function SessionTabsWithExit(props: ParentProps) {
+  const keymap = Keymap.use()
+  return <SessionTabsProvider onLastClose={() => keymap.dispatch("app.exit")}>{props.children}</SessionTabsProvider>
+}
 
 function App() {
   const app = useTuiApp()
@@ -745,7 +751,7 @@ function App() {
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
               : undefined
-          sessionTabs.close()
+          sessionTabs.close(undefined, { exitOnLast: false })
           route.navigate({
             type: "home",
             location: newSessionLocation(
