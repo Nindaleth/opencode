@@ -29,6 +29,7 @@ export const dict = {
   "command.project.copyID": "Copy Project ID",
   "command.provider.connect": "Connect provider",
   "command.provider.connect.description": "Sign in to OpenCode Go, OpenCode Console, or another model provider",
+  "command.location.reload": "Reload configuration",
   "command.settings.open": "Open settings",
   "command.session.location.cycle": "Cycle session location",
 
@@ -392,6 +393,8 @@ export const dict = {
   "toast.session.copyID.failed.description": "An error occurred while copying the session ID",
   "toast.project.copyID.failed.title": "Failed to copy project ID",
   "toast.project.copyID.failed.description": "An error occurred while copying the project ID",
+  "toast.location.reload.success.title": "Configuration reloaded",
+  "toast.location.reload.failed.title": "Failed to reload configuration",
 
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
   "toast.migration.failed.title": "Data migration failed",

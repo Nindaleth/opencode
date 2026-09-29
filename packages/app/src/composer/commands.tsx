@@ -6,6 +6,8 @@ import { getCursorPosition, setCursorPosition } from "./editor/dom"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionOwnership } from "@/session/session-ownership"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { useServerSDK } from "@/runtime/server/client"
+import { showToast } from "@/shell/notifications/toast"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -20,6 +22,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const language = useLanguage()
   const local = useLocal()
   const workspace = useWorkspaceLocation()
+  const serverSDK = useServerSDK()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
@@ -56,6 +59,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   }
 
   command.register("composer", () => [
+    createReloadCommand({ reload: () => serverSDK.api.location.reload(), t: language.t, notify: showToast }),
     modelCommand({
       id: "model.choose",
       title: language.t("command.model.choose"),
@@ -96,4 +100,35 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       onSelect: () => local.agent.move(-1),
     }),
   ])
+}
+
+export function createReloadCommand(input: {
+  reload: () => Promise<unknown>
+  t: (
+    key:
+      | "command.category.server"
+      | "command.location.reload"
+      | "toast.location.reload.success.title"
+      | "toast.location.reload.failed.title",
+  ) => string
+  notify: (notice: { variant: "success" | "error"; title: string; description?: string }) => unknown
+}): CommandOption {
+  return {
+    id: "location.reload",
+    title: input.t("command.location.reload"),
+    category: input.t("command.category.server"),
+    slash: "reload",
+    onSelect: async () => {
+      try {
+        await input.reload()
+        input.notify({ variant: "success", title: input.t("toast.location.reload.success.title") })
+      } catch (err) {
+        input.notify({
+          variant: "error",
+          title: input.t("toast.location.reload.failed.title"),
+          description: err instanceof Error ? err.message : undefined,
+        })
+      }
+    },
+  }
 }
