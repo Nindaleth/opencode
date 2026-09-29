@@ -220,6 +220,26 @@ test("saved service environment cannot move the registration's state directory",
   }
 })
 
+test("service config requires an explicit boolean to enable passwordless access", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-passwordless-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    await run(ServiceConfig.set("passwordless", "true"))
+    expect(await run(ServiceConfig.read())).toEqual({ passwordless: true })
+    expect(await run(ServiceConfig.get("passwordless"))).toBe("true")
+    await run(ServiceConfig.set("passwordless", "false"))
+    expect(await run(ServiceConfig.read())).toEqual({ passwordless: false })
+    await expect(run(ServiceConfig.set("passwordless", "yes"))).rejects.toThrow()
+    expect(await run(ServiceConfig.read())).toEqual({ passwordless: false })
+    await run(ServiceConfig.unset("passwordless"))
+    expect(await run(ServiceConfig.read())).toEqual({})
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test.skipIf(process.platform === "win32" || !Bun.which("lsof"))("port owner names the listening process", async () => {
   using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
   using wildcard = Bun.serve({ hostname: "0.0.0.0", port: 0, fetch: () => new Response() })
@@ -480,6 +500,56 @@ test("configured managed service port overrides the channel default", async () =
     expect((await Bun.file(config).json()).password).toBe(info.password)
     await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     await owner.exited
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("passwordless managed service retains its registration credential while serving unauthenticated API requests", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-open-"))
+  const config = path.join(root, "config", "opencode", ServiceConfig.filename())
+  const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+  await fs.mkdir(path.dirname(config), { recursive: true })
+  await fs.writeFile(config, JSON.stringify({ port: await availablePort(), password: "secret", passwordless: true }))
+  const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
+    env: serviceEnv(root),
+    stderr: "pipe",
+    stdout: "ignore",
+  })
+  try {
+    const info = await waitForInfo(registration)
+    expect(info.password).toBe("secret")
+    const response = await waitForAPI(new URL("/api/info", info.url), owner)
+    expect(response.status).toBe(200)
+    expect((await response.json()).version).toBe(OPENCODE_VERSION)
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("foreground --passwordless serves the API without credentials", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-serve-open-"))
+  const port = await availablePort()
+  const owner = Bun.spawn(
+    [
+      process.execPath,
+      path.join(import.meta.dir, "../src/index.ts"),
+      "serve",
+      "--port",
+      String(port),
+      "--passwordless",
+    ],
+    { env: { ...serviceEnv(root), OPENCODE_PASSWORD: "secret" }, stderr: "pipe", stdout: "ignore" },
+  )
+  try {
+    const url = `http://127.0.0.1:${port}/api/info`
+    const response = await waitForAPI(url, owner)
+    expect(response.status).toBe(200)
+    expect((await response.json()).version).toBe(OPENCODE_VERSION)
   } finally {
     owner.kill("SIGTERM")
     await owner.exited
@@ -784,6 +854,17 @@ test("a failed service stays registered and owns the selected port until stopped
     await fs.rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+async function waitForAPI(url: string | URL, owner: Bun.Subprocess<"ignore", "ignore", "pipe">) {
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    const response = await fetch(url).catch(() => undefined)
+    if (response !== undefined && response.status !== 503) return response
+    if (owner.exitCode !== null) throw new Error(await new Response(owner.stderr).text())
+    await Bun.sleep(50)
+  }
+  throw new Error("Timed out waiting for server readiness")
+}
 
 async function waitForInfo(file: string, accept: (info: Info) => boolean = () => true) {
   for (let attempt = 0; attempt < 400; attempt++) {
