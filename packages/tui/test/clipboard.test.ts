@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test"
+import { chmod, mkdtemp, rm } from "node:fs/promises"
+import path from "node:path"
 import {
   createClipboard,
   type ClipboardReadOptions,
@@ -145,4 +147,42 @@ test("rejects reads when no clipboard route is supported", async () => {
   const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
 
   await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+})
+
+test("Wayland clipboard was skipped for a container terminal without OSC 52", async () => {
+  const directory = await mkdtemp("/tmp/opencode/clipboard-")
+  try {
+    await Bun.write(path.join(directory, "wl-copy"), '#!/bin/sh\ncat > "$OPENCODE_TEST_CLIPBOARD_FILE"\n')
+    await chmod(path.join(directory, "wl-copy"), 0o755)
+    const process = Bun.spawn(
+      [
+        "bun",
+        "-e",
+        `import { createTuiClipboard } from "./src/clipboard";
+         const clipboard = createTuiClipboard({
+           capabilities: { remote: true, osc52_support: "unknown" },
+           copyToClipboardOSC52: () => true,
+           clearClipboardOSC52: () => true,
+         });
+         await clipboard.write("selected while generating");
+         await clipboard.dispose();`,
+      ],
+      {
+        cwd: path.resolve(import.meta.dir, ".."),
+        env: {
+          ...Bun.env,
+          WAYLAND_DISPLAY: "wayland-test",
+          XDG_RUNTIME_DIR: directory,
+          PATH: `${directory}:${Bun.env.PATH}`,
+          OPENCODE_TEST_CLIPBOARD_FILE: path.join(directory, "selection"),
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    expect(await process.exited).toBe(0)
+    expect(await Bun.file(path.join(directory, "selection")).text()).toBe("selected while generating")
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
