@@ -351,7 +351,7 @@ export function Session(props: {
           variant: "error",
           duration: 5000,
         })
-        sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+        sessionTabs.enabled() ? sessionTabs.close(sessionID, { exitOnLast: false }) : navigate({ type: "home" })
         return
       }
       editor.reconnect(info.location.directory)
@@ -363,7 +363,7 @@ export function Session(props: {
         variant: "error",
         duration: 5000,
       })
-      sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
+      sessionTabs.enabled() ? sessionTabs.close(sessionID, { exitOnLast: false }) : navigate({ type: "home" })
     })
   })
 
