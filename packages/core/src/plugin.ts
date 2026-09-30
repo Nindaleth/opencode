@@ -62,7 +62,25 @@ const layer = Layer.effect(
         })
       }, plugin.id)
       const exit = yield* Effect.suspend(() =>
-        plugin.effect({ ...host, storage: PluginHost.storage(kv, plugin.id) }),
+        plugin.effect({
+          ...host,
+          storage: PluginHost.storage(kv, plugin.id),
+          session: {
+            ...host.session,
+            hook: (name, callback, options) =>
+              host.session.hook(
+                name,
+                (event) =>
+                  Effect.suspend(() => {
+                    // DCP's context hook requires a persisted Session; prompt previews use an unsaved one.
+                    if (plugin.id === "opencode-dcp" && name === "context" && "preview" in event && event.preview)
+                      return Effect.void
+                    return callback(event)
+                  }),
+                options,
+              ),
+          },
+        }),
       ).pipe(
         grouped,
         inherit,

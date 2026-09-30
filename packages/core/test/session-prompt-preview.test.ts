@@ -22,6 +22,7 @@ import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { Instructions } from "../src/instructions/index"
 import { Money } from "@opencode/schema/money"
+import { fromPromise } from "@opencode/plugin/promise/adapter"
 
 const instances = Layer.effect(
   LocationServiceMap.Service,
@@ -51,6 +52,73 @@ const it = testEffect(
 )
 
 describe("SessionPromptPreview", () => {
+  it.live("DCP's stored-session lookup no longer breaks previews", () =>
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        yield* plugins.activate([
+          {
+            ...fromPromise({
+              id: "opencode-dcp",
+              async setup(ctx) {
+                await ctx.session.hook("context", async (event) => {
+                  await ctx.session.get({ sessionID: event.sessionID })
+                  event.system.push({ type: "text", text: "DCP instructions" })
+                })
+                await ctx.tool.transform((editor) =>
+                  editor.add({
+                    name: "compress",
+                    description: "Compress conversation history",
+                    input: { type: "object", properties: {} },
+                    options: { codemode: false },
+                    execute: async () => ({ content: [] }),
+                  }),
+                )
+              },
+            }),
+            revision: "1",
+          },
+          {
+            id: "preview-overrides",
+            revision: "1",
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                yield* ctx.session.hook("context", (event) =>
+                  Effect.sync(() => event.system.push({ type: "text", text: "Preview instructions" })),
+                )
+                yield* ctx.tool.hook("definition", (event) =>
+                  Effect.sync(() => {
+                    if (event.toolID === "compress") event.description = "Overridden compression description"
+                  }),
+                )
+              }),
+          },
+        ])
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) => editor.update(Agent.ID.make("build"), (agent) => (agent.mode = "primary")))
+        const providers = yield* Provider.Service
+        const providerID = Provider.ID.make("test")
+        yield* providers.transform((editor) =>
+          editor.add({
+            info: {
+              ...Provider.Info.empty(providerID),
+              activation: "enabled",
+              package: "@opencode/ai/providers/openai-compatible",
+              settings: { baseURL: "https://example.test/v1" },
+            },
+            models: [Model.Info.default(providerID, Model.ID.make("gpt-5"))],
+          }),
+        )
+        const preview = yield* SessionPromptPreview.Service
+        const result = yield* preview.prepare({ provider: "test", model: "gpt-5" })
+        expect(result.system).toContain("Preview instructions")
+        expect(result.system).not.toContain("DCP instructions")
+        expect(result.tools).toContainEqual({ name: "compress", description: "Overridden compression description" })
+      }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make("/tmp") }))))
+    }),
+  )
   it.effect("uses the default agent and model and returns the same prepared initial request", () =>
     Effect.gen(function* () {
       const locations = yield* LocationServiceMap.Service
