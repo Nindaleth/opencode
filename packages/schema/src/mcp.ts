@@ -54,6 +54,9 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   type: Schema.Literal("remote"),
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  skip_tls_verify: Schema.Boolean.pipe(optional).annotate({
+    description: "Skip TLS certificate verification for this server's HTTP transport (Bun only). Defaults to false.",
+  }),
   oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
   codemode: Schema.Boolean.pipe(optional).annotate({

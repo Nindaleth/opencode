@@ -60,6 +60,7 @@ import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
+import { cert, key } from "./fixture/mcp-tls"
 import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
@@ -94,6 +95,7 @@ function resourceServer(
     listChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
+    tls?: { cert: string; key: string }
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -248,6 +250,7 @@ function resourceServer(
       const modern = input.modern ? createMcpHandler(server, { legacy: "reject" }) : undefined
       const http = Bun.serve({
         port: 0,
+        tls: input.tls,
         fetch: async (request) => {
           state.urls.push(request.url)
           const session = request.headers.get("mcp-session-id")
@@ -1136,6 +1139,44 @@ test("applies configured MCP timeouts to resource operations", async () => {
   )
   await expect(read).rejects.toThrow("Request timed out")
 })
+
+for (const protocol of ["legacy", "2026-07-28"] as const) {
+  testEffect(Layer.empty).live(`remote MCP skips TLS verification only for the opted-in server (${protocol})`, () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ tls: { cert, key }, modern: protocol === "2026-07-28" })
+      const config = Schema.decodeUnknownSync(ConfigMCP.Remote)({
+        type: "remote",
+        url: server.url,
+        oauth: false,
+        protocol,
+        skip_tls_verify: true,
+      })
+      const connection = yield* connect("self-signed", config, import.meta.dir)
+      expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
+      expect(yield* connection.callTool({ name: "echo" })).toEqual({ isError: false, content: [] })
+
+      for (const skip_tls_verify of [undefined, false]) {
+        const error = yield* connect(
+          "verified",
+          Schema.decodeUnknownSync(ConfigMCP.Remote)({
+            type: "remote",
+            url: server.url,
+            oauth: false,
+            protocol,
+            ...(skip_tls_verify === undefined ? {} : { skip_tls_verify }),
+          }),
+          import.meta.dir,
+        ).pipe(Effect.flip)
+        expect(error).toBeInstanceOf(McpClient.ConnectError)
+        expect(error.message).toMatch(/certificate|self.signed/i)
+      }
+      const error = yield* Effect.tryPromise({ try: () => fetch(server.url), catch: (error) => error }).pipe(
+        Effect.flip,
+      )
+      expect(String(error)).toMatch(/certificate|self.signed/i)
+    }),
+  )
+}
 
 for (const entry of [
   { name: "default", query: "", codemode: undefined, expected: "?codemode=false" },

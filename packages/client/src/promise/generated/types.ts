@@ -2119,6 +2119,7 @@ export type ConfigEntry =
                   type: "remote"
                   url: string
                   headers?: { [x: string]: string }
+                  skip_tls_verify?: boolean
                   oauth?:
                     | {
                         client_id?: string
@@ -5827,6 +5828,7 @@ export type McpAddInput = {
           readonly type: "remote"
           readonly url: string
           readonly headers?: { readonly [x: string]: string }
+          readonly skip_tls_verify?: boolean
           readonly oauth?:
             | {
                 readonly client_id?: string

@@ -275,7 +275,10 @@ export const connect = Effect.fnUntraced(function* (
     if (addedCodemode) url.searchParams.set("codemode", "false")
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
-        requestInit: config.headers ? { headers: config.headers } : undefined,
+        requestInit: {
+          headers: config.headers,
+          ...(config.skip_tls_verify ? { tls: { rejectUnauthorized: false } } : {}),
+        },
         authProvider,
         fetch,
       })
