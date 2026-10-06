@@ -21,6 +21,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Config } from "@opencode/core/config"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -77,6 +78,7 @@ import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
+import { cert, key } from "./fixture/mcp-tls"
 import { tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
@@ -127,6 +129,7 @@ function resourceServer(
     elicitationTimeout?: number
     /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
     roots?: boolean
+    tls?: { cert: string; key: string }
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -331,6 +334,7 @@ function resourceServer(
       const modern = input.modern ? createMcpHandler(server, { legacy: "reject" }) : undefined
       const http = Bun.serve({
         port: 0,
+        tls: input.tls,
         fetch: async (request) => {
           state.urls.push(request.url)
           const session = request.headers.get("mcp-session-id")
@@ -1308,6 +1312,56 @@ test("applies configured MCP timeouts to resource operations", async () => {
   )
   await expect(read).rejects.toThrow("Request timed out")
 })
+
+for (const entry of [
+  { layout: "legacy", protocol: "legacy" },
+  { layout: "native", protocol: "legacy" },
+  { layout: "native", protocol: "2026-07-28" },
+] as const) {
+  testEffect(Layer.empty).live(
+    `remote MCP skips TLS verification only for the opted-in server (${entry.layout} config, ${entry.protocol})`,
+    () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ tls: { cert, key }, modern: entry.protocol === "2026-07-28" })
+        const remote = {
+          type: "remote",
+          url: server.url,
+          oauth: false,
+          ...(entry.layout === "native" ? { protocol: entry.protocol } : {}),
+          skip_tls_verify: true,
+        }
+        const normalized = ConfigNormalize.normalize({
+          mcp: entry.layout === "legacy" ? { "self-signed": remote } : { servers: { "self-signed": remote } },
+        })
+        if (normalized.type !== "normalized") throw new Error("Expected normalized MCP configuration")
+        const config = Schema.decodeUnknownSync(Info)(normalized.encoded).mcp?.servers?.["self-signed"]
+        if (!config) throw new Error("Expected remote MCP server")
+        const connection = yield* connect("self-signed", config, import.meta.dir)
+        expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["echo"])
+        expect(yield* connection.callTool({ name: "echo" })).toEqual({ isError: false, content: [] })
+
+        for (const skip_tls_verify of [undefined, false]) {
+          const error = yield* connect(
+            "verified",
+            Schema.decodeUnknownSync(ConfigMCP.Remote)({
+              type: "remote",
+              url: server.url,
+              oauth: false,
+              protocol: entry.protocol,
+              ...(skip_tls_verify === undefined ? {} : { skip_tls_verify }),
+            }),
+            import.meta.dir,
+          ).pipe(Effect.flip)
+          expect(error).toBeInstanceOf(McpClient.ConnectError)
+          expect(error.message).toMatch(/certificate|self.signed/i)
+        }
+        const error = yield* Effect.tryPromise({ try: () => fetch(server.url), catch: (error) => error }).pipe(
+          Effect.flip,
+        )
+        expect(String(error)).toMatch(/certificate|self.signed/i)
+      }),
+  )
+}
 
 for (const entry of [
   { name: "direct tools", query: "", codemode: false, expected: "" },
