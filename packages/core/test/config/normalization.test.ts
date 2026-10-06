@@ -484,6 +484,35 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  for (const layout of ["legacy", "native"] as const) {
+    for (const skip_tls_verify of [true, false, undefined]) {
+      test(`preserves remote MCP skip_tls_verify: ${skip_tls_verify} through ${layout} configuration`, () => {
+        const server = {
+          type: "remote",
+          url: "https://localhost/mcp",
+          oauth: false,
+          ...(skip_tls_verify === undefined ? {} : { skip_tls_verify }),
+        }
+        const result = normalized({ mcp: layout === "legacy" ? { canary: server } : { servers: { canary: server } } })
+        expect(result.diagnostics).toEqual([])
+        expect(Schema.decodeUnknownSync(Info, options)(result.encoded).mcp?.servers?.canary).toMatchObject(server)
+        if (skip_tls_verify === undefined)
+          expect(Schema.decodeUnknownSync(Info, options)(result.encoded).mcp?.servers?.canary).not.toHaveProperty(
+            "skip_tls_verify",
+          )
+      })
+    }
+
+    test(`rejects non-boolean remote MCP skip_tls_verify in ${layout} configuration`, () => {
+      const server = { type: "remote", url: "https://localhost/mcp", skip_tls_verify: "true" }
+      const result = normalized({ mcp: layout === "legacy" ? { canary: server } : { servers: { canary: server } } })
+      expect(result.encoded.mcp).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+        ["invalid", layout === "legacy" ? ["mcp", "canary"] : ["mcp", "servers", "canary"]],
+      ])
+    })
+  }
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {

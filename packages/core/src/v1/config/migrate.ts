@@ -97,6 +97,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
     type: info.type,
     url: info.url,
     headers: info.headers,
+    ...(info.skip_tls_verify === undefined ? {} : { skip_tls_verify: info.skip_tls_verify }),
     oauth: info.oauth && {
       client_id: info.oauth.clientId,
       client_secret: info.oauth.clientSecret,
