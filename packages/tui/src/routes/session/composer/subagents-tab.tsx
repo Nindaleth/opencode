@@ -12,7 +12,7 @@ import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { sessionFamily } from "../../../util/session"
+import { contextUsage, formatContextUsage, sessionFamily } from "../../../util/session"
 
 interface SubagentEntry {
   sessionID: string
@@ -69,6 +69,11 @@ export function SubagentsTab(props: { sessionID: string }) {
   let scroll: ScrollBoxRenderable | undefined
 
   const selectedEntry = createMemo(() => entries()[store.selected])
+
+  createEffect(() => {
+    if (!composer.active("subagents") || client.connection.status() !== "connected") return
+    void Promise.allSettled(entries().map((entry) => data.session.message.sync(entry.sessionID)))
+  })
 
   createEffect(() => {
     const active = composer.active("subagents")
@@ -209,6 +214,16 @@ export function SubagentsTab(props: { sessionID: string }) {
                 if (entry.status === "running") return "Running"
                 return ""
               })
+              const usage = createMemo(() => {
+                const session = data.session.get(entry.sessionID)
+                if (!session) return
+                const value = contextUsage(
+                  data.session.message.list(session.id),
+                  data.location.model.list(session.location),
+                  session.revert?.messageID,
+                )
+                return value && formatContextUsage(value.tokens, value.percent)
+              })
               return (
                 <box
                   flexDirection="row"
@@ -238,13 +253,22 @@ export function SubagentsTab(props: { sessionID: string }) {
                       }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
+                      truncate
+                      flexShrink={1}
                     >
                       {entry.prefix}
                       {entry.agent}: {entry.title}
                     </text>
                   </box>
-                  <Show when={status()}>
-                    <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                  <Show when={usage() || status()}>
+                    <text
+                      fg={active() ? theme.text.action.primary.focused : theme.text.muted}
+                      wrapMode="none"
+                      flexShrink={0}
+                      marginLeft={1}
+                    >
+                      {usage()}
+                      <Show when={usage() && status()}> · </Show>
                       {status()}
                     </text>
                   </Show>

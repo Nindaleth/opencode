@@ -40,6 +40,7 @@ import {
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { contextUsage, formatContextUsage } from "../../util/session"
 import { FilePath } from "../../ui/file-path"
 import {
   canonicalToolName,
@@ -3306,6 +3307,7 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
+  const client = useClient()
   const sessionID = createMemo(
     () =>
       stringValue(props.metadata.sessionID) ??
@@ -3319,6 +3321,22 @@ function Subagent(props: ToolProps) {
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
+  })
+  const usage = createMemo(() => {
+    const id = sessionID()
+    const session = id ? data.session.get(id) : undefined
+    if (!session) return
+    const value = contextUsage(
+      data.session.message.list(session.id),
+      data.location.model.list(session.location),
+      session.revert?.messageID,
+    )
+    return value && formatContextUsage(value.tokens, value.percent)
+  })
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    const id = sessionID()
+    if (id) void data.session.message.sync(id).catch(() => undefined)
   })
 
   return (
@@ -3335,6 +3353,7 @@ function Subagent(props: ToolProps) {
       }}
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
+      {usage() ? ` · ${usage()}` : ""}
     </InlineTool>
   )
 }
