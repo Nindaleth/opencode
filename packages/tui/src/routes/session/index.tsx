@@ -23,14 +23,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -46,6 +39,7 @@ import {
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { contextUsage, formatContextUsage } from "../../util/session"
 import { FilePath } from "../../ui/file-path"
 import {
   canonicalToolName,
@@ -694,13 +688,13 @@ export function Session(props: {
         const active = prompt()
         return Boolean(
           !sessionDisposed &&
-            route.sessionID === event.data.sessionID &&
-            active &&
-            active.current.text === expectedText &&
-            (active.current.files?.length ?? 0) === expectedFiles &&
-            (active.current.agents?.length ?? 0) === expectedAgents &&
-            (active.current.skills?.length ?? 0) === expectedSkills &&
-            active.current.pasted.length === expectedPasted,
+          route.sessionID === event.data.sessionID &&
+          active &&
+          active.current.text === expectedText &&
+          (active.current.files?.length ?? 0) === expectedFiles &&
+          (active.current.agents?.length ?? 0) === expectedAgents &&
+          (active.current.skills?.length ?? 0) === expectedSkills &&
+          active.current.pasted.length === expectedPasted,
         )
       }
       const canOpen = () =>
@@ -1279,7 +1273,9 @@ export function Session(props: {
       },
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
-          (msg) => msg.type === "assistant" || (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
+          (msg) =>
+            msg.type === "assistant" ||
+            (msg.type === "compaction" && msg.status === "completed" && msg.summary.trim() !== ""),
         )
         if (!lastAssistantMessage) {
           toast.show({ message: "No assistant messages found", variant: "error" })
@@ -3224,7 +3220,9 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.path))}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>
@@ -3289,6 +3287,7 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
+  const client = useClient()
   const sessionID = createMemo(
     () =>
       stringValue(props.metadata.sessionID) ??
@@ -3302,6 +3301,22 @@ function Subagent(props: ToolProps) {
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
+  })
+  const usage = createMemo(() => {
+    const id = sessionID()
+    const session = id ? data.session.get(id) : undefined
+    if (!session) return
+    const value = contextUsage(
+      data.session.message.list(session.id),
+      data.location.model.list(session.location),
+      session.revert?.messageID,
+    )
+    return value && formatContextUsage(value.tokens, value.percent)
+  })
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    const id = sessionID()
+    if (id) void data.session.message.sync(id).catch(() => undefined)
   })
 
   return (
@@ -3323,6 +3338,7 @@ function Subagent(props: ToolProps) {
       }
     >
       {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
+      {usage() ? ` · ${usage()}` : ""}
     </InlineTool>
   )
 }
