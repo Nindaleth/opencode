@@ -152,6 +152,22 @@ describe("run permission shared", () => {
     })
   })
 
+  test("shows MCP command permission scope without source tool input", () => {
+    const request = req({
+      action: "shield_oam_command",
+      resources: ["sysinfo.cpu.extended_show"],
+      save: ["sysinfo.cpu.extended_show"],
+    })
+    expect(permissionInfo(request)).toMatchObject({
+      title: "Call tool shield_oam_command",
+      lines: ["Tool: shield_oam_command", "- sysinfo.cpu.extended_show"],
+    })
+    expect(permissionAlwaysLines(request)).toEqual([
+      "This will always allow the following patterns for this project.",
+      "- sysinfo.cpu.extended_show",
+    ])
+  })
+
   test("uses source patch text when an edit has no generated diff", () => {
     const patch = '*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+const arrow = "→"\n*** End Patch'
     const request = req({

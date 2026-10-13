@@ -23,6 +23,12 @@ export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annota
     'MCP protocol negotiation. "legacy" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "auto" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "2026-07-28" requires that revision and fails otherwise.',
 })
 
+export type PermissionResources = typeof PermissionResources.Type
+export const PermissionResources = Schema.Record(Schema.String, Schema.NonEmptyString).annotate({
+  identifier: "Mcp.PermissionResources",
+  description: "Map raw MCP tool names to top-level string arguments used as permission resources and saved patterns.",
+})
+
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
@@ -30,6 +36,7 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
   environment: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  permission_resources: PermissionResources.pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
   codemode: Schema.Boolean.pipe(optional).annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
@@ -58,6 +65,7 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   type: Schema.Literal("remote"),
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  permission_resources: PermissionResources.pipe(optional),
   skip_tls_verify: Schema.Boolean.pipe(optional).annotate({
     description: "Skip TLS certificate verification for this server's HTTP transport (Bun only). Defaults to false.",
   }),

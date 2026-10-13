@@ -4177,6 +4177,91 @@
         "summary": "Get session message"
       }
     },
+    "/api/session/{sessionID}/message/{messageID}/artifact/{key}": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.artifact",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "messageID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.Message.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | MessageNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Download a binary artifact owned by a projected assistant message in this session.",
+        "summary": "Download session artifact"
+      }
+    },
     "/api/session/{sessionID}/form": {
       "get": {
         "tags": ["session"],
@@ -15094,6 +15179,176 @@
         "summary": "Write a heap snapshot"
       }
     },
+    "/api/debug/prompt": {
+      "get": {
+        "tags": ["debug"],
+        "operationId": "debug.prompt",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          },
+          {
+            "name": "agent",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "selection": {
+                      "type": "object",
+                      "properties": {
+                        "provider": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "agent": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["provider", "model", "agent"],
+                      "additionalProperties": false
+                    },
+                    "system": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["name", "description"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["selection", "system", "tools"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Preview the initial model request without creating a session or calling a model.",
+        "summary": "Preview effective model prompt"
+      }
+    },
     "/api/debug/location": {
       "get": {
         "tags": ["debug"],
@@ -20167,6 +20422,9 @@
               "type": "string"
             }
           },
+          "permission_resources": {
+            "$ref": "#/components/schemas/Mcp.PermissionResources"
+          },
           "disabled": {
             "type": "boolean"
           },
@@ -20230,6 +20488,14 @@
         },
         "additionalProperties": false
       },
+      "Mcp.PermissionResources": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": "Map raw MCP tool names to top-level string arguments used as permission resources and saved patterns."
+      },
       "Mcp.Protocol": {
         "type": "string",
         "enum": ["legacy", "auto", "2026-07-28"],
@@ -20250,6 +20516,12 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "permission_resources": {
+            "$ref": "#/components/schemas/Mcp.PermissionResources"
+          },
+          "skip_tls_verify": {
+            "type": "boolean"
           },
           "oauth": {
             "anyOf": [
@@ -23485,6 +23757,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/Session.Message.Assistant.Tool"
+                },
+                {
+                  "$ref": "#/components/schemas/Session.Message.Assistant.Artifact"
                 }
               ]
             }
@@ -23531,6 +23806,30 @@
           }
         },
         "required": ["id", "time", "type", "agent", "model", "content"],
+        "additionalProperties": false
+      },
+      "Session.Message.Assistant.Artifact": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["artifact"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mime": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "key", "name", "mime", "size"],
         "additionalProperties": false
       },
       "Session.Message.Assistant.Reasoning": {

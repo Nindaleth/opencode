@@ -139,7 +139,7 @@ export function permissionPresentation(
   return {
     icon: "⚙",
     title: `Call tool ${source.action}`,
-    lines: [`Tool: ${source.action}`],
+    lines: [`Tool: ${source.action}`, ...resources.filter((item) => item !== "*").map((item) => `- ${item}`)],
   }
 }
 

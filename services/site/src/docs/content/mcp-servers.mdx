@@ -109,17 +109,18 @@ Use configuration for other process options such as a working directory:
 }
 ```
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `"local"`. |
-| `command` | Yes | Executable followed by its arguments. |
-| `cwd` | No | Process directory. Relative paths resolve from the workspace, which is also the default. |
-| `environment` | No | String variables added to OpenCode's inherited process environment. |
-| `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
-| `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
-| `timeout` | No | Per-server timeout overrides. |
-| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
-| `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
+| Field                  | Required | Description                                                                                                    |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `type`                 | Yes      | Must be `"local"`.                                                                                             |
+| `command`              | Yes      | Executable followed by its arguments.                                                                          |
+| `cwd`                  | No       | Process directory. Relative paths resolve from the workspace, which is also the default.                       |
+| `environment`          | No       | String variables added to OpenCode's inherited process environment.                                            |
+| `permission_resources` | No       | Map raw tool names to argument names used for [command-sensitive permissions](#command-sensitive-permissions). |
+| `disabled`             | No       | Prevents connection when `true`. Defaults to `false`.                                                          |
+| `codemode`             | No       | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`.                      |
+| `timeout`              | No       | Per-server timeout overrides.                                                                                  |
+| `protocol`             | No       | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version).                        |
+| `pool`                 | No       | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections).   |
 
 Use `{env:NAME}` for environment substitution. Shell expressions such as `$NAME` are not expanded in JSON strings:
 
@@ -165,17 +166,18 @@ Use configuration for other options. Store secrets in environment variables rath
 }
 ```
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `type` | Yes | Must be `"remote"`. |
-| `url` | Yes | Absolute Streamable HTTP endpoint. |
-| `headers` | No | String HTTP headers sent to the endpoint. |
-| `oauth` | No | OAuth settings, or `false` to disable OAuth. |
-| `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
-| `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
-| `timeout` | No | Per-server timeout overrides. |
-| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
-| `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
+| Field                  | Required | Description                                                                                                    |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `type`                 | Yes      | Must be `"remote"`.                                                                                            |
+| `url`                  | Yes      | Absolute Streamable HTTP endpoint.                                                                             |
+| `headers`              | No       | String HTTP headers sent to the endpoint.                                                                      |
+| `permission_resources` | No       | Map raw tool names to argument names used for [command-sensitive permissions](#command-sensitive-permissions). |
+| `oauth`                | No       | OAuth settings, or `false` to disable OAuth.                                                                   |
+| `disabled`             | No       | Prevents connection when `true`. Defaults to `false`.                                                          |
+| `codemode`             | No       | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`.                      |
+| `timeout`              | No       | Per-server timeout overrides.                                                                                  |
+| `protocol`             | No       | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version).                        |
+| `pool`                 | No       | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections).   |
 
 Use `oauth: false` only when the server exclusively uses an API key or another header credential:
 
@@ -228,11 +230,11 @@ The prompt appears in `/mcps`, in `opencode mcp auth`, and in the desktop and we
 
 OpenCode identifies itself to the authorization server with the first method that applies:
 
-| Method | Used when |
-| --- | --- |
-| Pre-registered client | `oauth.client_id` is configured. |
+| Method                                                                                                                                          | Used when                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Pre-registered client                                                                                                                           | `oauth.client_id` is configured.                                                                |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | The authorization server supports CIMD and public clients, and `oauth.redirect_uri` is not set. |
-| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins. |
+| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR)                                                              | Neither of the above applies. OpenCode registers a client and reuses it on later sign-ins.      |
 
 An authorization server opts into CIMD through its metadata:
 
@@ -285,13 +287,13 @@ When a provider gives you client credentials, use V2's snake_case OAuth fields:
 }
 ```
 
-| Field | Description |
-| --- | --- |
-| `client_id` | Pre-registered client ID. Takes priority over CIMD and DCR. |
-| `client_secret` | Secret for a confidential client, sent in the token request body. Omit it for public clients. |
-| `scope` | Space-delimited scopes to request. Defaults to the scope the server names when it rejects an unauthenticated request. |
-| `callback_port` | Local callback port from `1` through `65535`. Defaults to the `redirect_uri` port, then an available ephemeral port. |
-| `redirect_uri` | Pre-registered loopback URI whose path and port reach the local callback listener. Setting it disables CIMD. |
+| Field                      | Description                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client_id`                | Pre-registered client ID. Takes priority over CIMD and DCR.                                                                                                                               |
+| `client_secret`            | Secret for a confidential client, sent in the token request body. Omit it for public clients.                                                                                             |
+| `scope`                    | Space-delimited scopes to request. Defaults to the scope the server names when it rejects an unauthenticated request.                                                                     |
+| `callback_port`            | Local callback port from `1` through `65535`. Defaults to the `redirect_uri` port, then an available ephemeral port.                                                                      |
+| `redirect_uri`             | Pre-registered loopback URI whose path and port reach the local callback listener. Setting it disables CIMD.                                                                              |
 | `auth_server_metadata_url` | URL of the authorization server's OAuth or OpenID Connect metadata document. Set it when the MCP server does not publish protected resource metadata that names its authorization server. |
 
 Remove stored OAuth credentials when you need to sign in again or switch accounts:
@@ -326,11 +328,11 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 }
 ```
 
-| Timeout | Default | Applies to |
-| --- | --- | --- |
-| `startup` | 30 seconds | Transport connection and server initialization. |
-| `catalog` | 30 seconds | Listing tools, prompts, resources, and resource templates. |
-| `execution` | 12 hours | Tool calls, prompt retrieval, and resource reads. |
+| Timeout     | Default    | Applies to                                                 |
+| ----------- | ---------- | ---------------------------------------------------------- |
+| `startup`   | 30 seconds | Transport connection and server initialization.            |
+| `catalog`   | 30 seconds | Listing tools, prompts, resources, and resource templates. |
+| `execution` | 12 hours   | Tool calls, prompt retrieval, and resource reads.          |
 
 ## Protocol version
 
@@ -351,11 +353,11 @@ OpenCode opens every server with the classic MCP `initialize` handshake by defau
 }
 ```
 
-| Value | Behavior |
-| --- | --- |
-| `legacy` | Default. Sends `initialize` and speaks protocol revisions up to 2025-11-25. |
-| `auto` | Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it. |
-| `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers. |
+| Value        | Behavior                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `legacy`     | Default. Sends `initialize` and speaks protocol revisions up to 2025-11-25.                                               |
+| `auto`       | Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it. |
+| `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers.                                             |
 
 Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
 
@@ -444,14 +446,49 @@ Use permission actions to hide or deny tools without disconnecting their server.
 }
 ```
 
+### Command-sensitive permissions
+
+Use `permission_resources` when one tool runs several commands and you want different permission rules for each command. Select the string argument to use as the permission resource:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "operations": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "permission_resources": {
+          "run": "command",
+        },
+      },
+    },
+  },
+  "permissions": [
+    { "action": "operations_run", "resource": "*", "effect": "ask" },
+    { "action": "operations_run", "resource": "*.*.get", "effect": "allow" },
+    { "action": "operations_run", "resource": "*.*.show", "effect": "allow" },
+  ],
+}
+```
+
+For `run({ command: "sysinfo.hostname.get" })`, these rules allow the call. A command such as `sysinfo.cpu.extended_show` asks for approval before OpenCode sends it to the server.
+
+- Map keys are exact raw tool names, not normalized permission actions or globs. Map values name top-level arguments; dots are literal, not nested paths.
+- The selected argument must be a non-empty string. Missing, empty, or non-string values fail before a permission request or server call; OpenCode does not trim or parse the value.
+- Use separate permission rules for multiple globs. The last matching rule wins, and `*` spans dots, so `*.*.get` also matches `a.b.c.get`.
+- Always allow saves the selected value as a project-scoped pattern. Existing wildcard semantics apply to `*` and `?` in saved values; a broad stored approval can still suppress an ask rule. Configured deny remains final.
+- Other arguments do not affect this permission scope. Server-side authorization still applies, and tools absent from the map retain resource `*`.
+- Both local and remote servers support the map. A higher-precedence server definition replaces the whole object, so repeat `permission_resources` in an override that should retain it.
+
 ## Resources
 
 Agents read MCP resources through two built-in tools, `list_mcp_resources` and `read_mcp_resource`. Control them with these permission actions:
 
-| Action | Resource |
-| --- | --- |
+| Action                        | Resource         |
+| ----------------------------- | ---------------- |
 | `opencode_list_mcp_resources` | The server name. |
-| `opencode_read_mcp_resource` | `<server>:<uri>` |
+| `opencode_read_mcp_resource`  | `<server>:<uri>` |
 
 For example, allow every read from the `docs` server:
 
@@ -510,12 +547,12 @@ For calls made on behalf of a session, OpenCode sends the session ID in `CallToo
 
 The ID is request metadata, not a tool argument, so it is absent from the model-visible schema. Treat it as an opaque correlation value:
 
-| Rule | Behavior |
-| --- | --- |
+| Rule     | Behavior                                                                    |
+| -------- | --------------------------------------------------------------------------- |
 | Identity | It identifies the invoking OpenCode session, not the MCP transport session. |
-| Presence | It can be absent for calls without session context. |
-| Security | Do not use it by itself for authentication or authorization. |
-| Privacy | Remote servers receive the raw ID and may log or retain it. |
+| Presence | It can be absent for calls without session context.                         |
+| Security | Do not use it by itself for authentication or authorization.                |
+| Privacy  | Remote servers receive the raw ID and may log or retain it.                 |
 
 ## Management
 

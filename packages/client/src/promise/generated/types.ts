@@ -378,6 +378,8 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
 
+export type McpPermissionResources = { [x: string]: string }
+
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
@@ -2455,6 +2457,7 @@ export type ConfigEntry =
                   command: Array<string>
                   cwd?: string
                   environment?: { [x: string]: string }
+                  permission_resources?: McpPermissionResources
                   disabled?: boolean
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
@@ -2465,6 +2468,7 @@ export type ConfigEntry =
                   type: "remote"
                   url: string
                   headers?: { [x: string]: string }
+                  permission_resources?: McpPermissionResources
                   skip_tls_verify?: boolean
                   oauth?:
                     | {
@@ -4137,6 +4141,7 @@ export type ExperimentalMcpAddInput = {
         readonly command: ReadonlyArray<string>
         readonly cwd?: string
         readonly environment?: { readonly [x: string]: string }
+        readonly permission_resources?: { readonly [x: string]: string }
         readonly disabled?: boolean
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
@@ -4147,6 +4152,7 @@ export type ExperimentalMcpAddInput = {
         readonly type: "remote"
         readonly url: string
         readonly headers?: { readonly [x: string]: string }
+        readonly permission_resources?: { readonly [x: string]: string }
         readonly skip_tls_verify?: boolean
         readonly oauth?:
           | {

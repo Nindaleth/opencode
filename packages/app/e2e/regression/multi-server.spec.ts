@@ -122,6 +122,36 @@ const reply = (sessionID: string, permissionID: string) => ({
   body: { decision: "once" },
 })
 
+test("MCP permission shows arguments and routing before approval", async ({ page }) => {
+  // MCP approvals showed the command but hid the process class and target instance.
+  const request = {
+    id: "permission-mcp-input",
+    sessionID: sessionA.id,
+    action: "shield_oam_command",
+    resources: ["monitor.processes.show"],
+    save: ["monitor.processes.show"],
+    metadata: {
+      input: {
+        command: "monitor.processes.show",
+        arguments: { class: "redis", filter: "<script>not executable</script>" },
+        oam_class: "monitor",
+        oam_instance: "monitor-000",
+      },
+    },
+  }
+  const view = await setup(page, { tabs: [sessionA.id], a: { sessionPermissions: { [sessionA.id]: [request] } } })
+  await page.goto(sessionHref(sessionA.id))
+  const dock = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  await expect(dock).toContainText("monitor.processes.show")
+  await expect(dock).toContainText('"class":"redis"')
+  await expect(dock).toContainText("oam_class: monitor")
+  await expect(dock).toContainText("oam_instance: monitor-000")
+  await expect(dock).toContainText("<script>not executable</script>")
+  expect(view.replies).toEqual([])
+  await dock.getByRole("button", { name: "Allow once", exact: true }).click()
+  await expect.poll(() => view.replies).toEqual([reply(sessionA.id, request.id)])
+})
+
 test("settings opened from a remote session sweep every server and keep the remote scope", async ({ page }) => {
   // Server A has no tab and is never visited: its pending request proves one toggle sweeps every connected server.
   const view = await setup(page, { tabs: [], a: { permissions: [pending("permission-pending-a", sessionA.id)] } })

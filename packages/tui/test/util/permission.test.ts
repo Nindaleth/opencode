@@ -21,3 +21,27 @@ test("preserves permission roots and self-contained metadata", () => {
     },
   )
 })
+
+test("shows generic MCP permission resources", () => {
+  expect(
+    permissionPresentation({ action: "shield_oam_command", resources: ["sysinfo.cpu.extended_show"] }),
+  ).toMatchObject({
+    title: "Call tool shield_oam_command",
+    lines: ["Tool: shield_oam_command", "- sysinfo.cpu.extended_show"],
+  })
+  expect(
+    permissionPresentation({
+      action: "shield_oam_command",
+      resources: ["*", "sysinfo.cpu.get", "sysinfo.hostname.get"],
+    }).lines,
+  ).toEqual(["Tool: shield_oam_command", "- sysinfo.cpu.get", "- sysinfo.hostname.get"])
+})
+
+test("preserves generic permission display for wildcard or empty resources", () => {
+  expect(permissionPresentation({ action: "shield_oam_command", resources: ["*"] }).lines).toEqual([
+    "Tool: shield_oam_command",
+  ])
+  expect(permissionPresentation({ action: "shield_oam_command", resources: [] }).lines).toEqual([
+    "Tool: shield_oam_command",
+  ])
+})

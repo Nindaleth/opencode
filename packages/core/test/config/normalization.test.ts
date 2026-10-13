@@ -513,6 +513,46 @@ describe("ConfigNormalize", () => {
     })
   }
 
+  for (const layout of ["legacy", "native"] as const) {
+    for (const connection of [
+      { type: "local", command: ["server"] },
+      { type: "remote", url: "https://localhost/mcp" },
+    ]) {
+      test(`preserves MCP permission_resources through ${layout} ${connection.type} configuration`, () => {
+        for (const permission_resources of [{ oam_command: "command" }, {}, undefined]) {
+          const server = { ...connection, ...(permission_resources === undefined ? {} : { permission_resources }) }
+          const result = normalized({ mcp: layout === "legacy" ? { shield: server } : { servers: { shield: server } } })
+          expect(result.diagnostics).toEqual([])
+          const decoded = Schema.decodeUnknownSync(Info, options)(result.encoded)
+          expect(decoded.mcp?.servers?.shield).toMatchObject(server)
+          if (permission_resources === undefined)
+            expect(decoded.mcp?.servers?.shield).not.toHaveProperty("permission_resources")
+        }
+      })
+
+      test(`drops malformed MCP permission_resources through ${layout} ${connection.type} configuration`, () => {
+        for (const permission_resources of [
+          null,
+          [],
+          "command",
+          ...["", null, 1, true, [], {}].map((value) => ({ oam_command: value })),
+        ]) {
+          const servers = {
+            shield: { ...connection, permission_resources },
+            valid: { type: "local", command: ["valid"] },
+          }
+          const result = normalized({ mcp: layout === "legacy" ? servers : { servers } })
+          expect(Schema.decodeUnknownSync(Info, options)(result.encoded).mcp?.servers).toEqual({
+            valid: { type: "local", command: ["valid"] },
+          })
+          expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+            ["invalid", layout === "legacy" ? ["mcp", "shield"] : ["mcp", "servers", "shield"]],
+          ])
+        }
+      })
+    }
+  }
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {

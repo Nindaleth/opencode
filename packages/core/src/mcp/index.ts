@@ -52,7 +52,11 @@ export interface ServerInstructions {
 }
 
 /** Checked MCP tool definition tagged with the server that owns it. */
-export type Tool = McpClient.Tool & { readonly server: ServerName; readonly codemode?: boolean }
+export type Tool = McpClient.Tool & {
+  readonly server: ServerName
+  readonly codemode?: boolean
+  readonly permissionResource?: string
+}
 export type ToolResultContent = McpClient.CallToolContent
 export type ToolResult = McpClient.CallToolResult
 export type Prompt = McpClient.Prompt & { readonly server: ServerName }
@@ -337,11 +341,9 @@ export const layer = (options?: Options) =>
                 .pipe(
                   Effect.raceFirst(waitForAbort(input.signal)),
                   Effect.ensuring(Effect.sync(() => key && urlElicitations.delete(key))),
-                  Effect.map(
-                    (state): McpClient.ElicitationResult => ({
-                      action: state.status === "answered" ? "accept" : "cancel",
-                    }),
-                  ),
+                  Effect.map((state): McpClient.ElicitationResult => ({
+                    action: state.status === "answered" ? "accept" : "cancel",
+                  })),
                 )
             }
             const params = input.params
@@ -483,13 +485,15 @@ export const layer = (options?: Options) =>
         if (entry.tagged?.source !== source)
           entry.tagged = {
             source,
-            tools: source.map(
-              (tool): Tool => ({
-                ...tool,
-                server: name,
-                codemode: entry.config.codemode,
-              }),
-            ),
+            tools: source.map((tool): Tool => ({
+              ...tool,
+              server: name,
+              codemode: entry.config.codemode,
+              permissionResource:
+                entry.config.permission_resources && Object.hasOwn(entry.config.permission_resources, tool.name)
+                  ? entry.config.permission_resources[tool.name]
+                  : undefined,
+            })),
           }
         return entry.tagged.tools
       }
@@ -740,14 +744,12 @@ export const layer = (options?: Options) =>
         servers: Effect.fn("MCP.servers")(function* () {
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
-            .map(
-              ([name, entry]): ServerInfo => ({
-                name,
-                status: entry.status,
-                title: entry.connection.client?.title,
-                integrationID: entry.integrationID,
-              }),
-            )
+            .map(([name, entry]): ServerInfo => ({
+              name,
+              status: entry.status,
+              title: entry.connection.client?.title,
+              integrationID: entry.integrationID,
+            }))
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)

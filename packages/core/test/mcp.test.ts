@@ -125,6 +125,7 @@ function resourceServer(
      * its `text` argument as text content.
      */
     tools?: ListToolsResult["tools"]
+    replaceTools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
@@ -179,7 +180,7 @@ function resourceServer(
         protocol.setRequestHandler("tools/list", () => {
           state.toolLists += 1
           return Promise.resolve({
-            tools: [
+            tools: input.replaceTools ?? [
               // Servers send raw JSON; the cast lets the fixture send a tool the schema rejects.
               ...(input.malformedTool
                 ? ([
@@ -2244,6 +2245,126 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
     }),
 )
 
+testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
+  "selects permission arguments by raw MCP tool names through configuration changes",
+  () =>
+    Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const config = {
+        type: "local" as const,
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+      }
+      yield* service.transform((editor) =>
+        editor.set("dynamic", { ...config, permission_resources: { first: "command", dynamic_second: "operation" } }),
+      )
+      expect(yield* service.tools()).toMatchObject([
+        { name: "first", permissionResource: "command" },
+        { name: "second" },
+      ])
+      expect((yield* service.tools())[1]).not.toHaveProperty("permissionResource", "operation")
+
+      const selected = yield* service.transform((editor) =>
+        editor.update("dynamic", (server) => (server.permission_resources = { second: "operation" })),
+      )
+      expect((yield* service.tools()).map((tool) => tool.permissionResource)).toEqual([undefined, "operation"])
+      yield* selected.dispose
+      expect((yield* service.tools()).map((tool) => tool.permissionResource)).toEqual(["command", undefined])
+
+      yield* service.transform((editor) => editor.set("dynamic", config))
+      expect((yield* service.tools()).map((tool) => tool.permissionResource)).toEqual([undefined, undefined])
+      yield* service.transform((editor) => editor.update("dynamic", (server) => (server.permission_resources = {})))
+      yield* service.reload()
+      expect((yield* service.tools()).map((tool) => tool.permissionResource)).toEqual([undefined, undefined])
+    }),
+)
+
+describe("MCP permission resource map own entries", () => {
+  const cases: ReadonlyArray<{
+    description: string
+    map: Readonly<Record<string, string>>
+    selected: Array<string | undefined>
+  }> = [
+    { description: "empty map", map: {}, selected: [undefined, undefined, undefined] },
+    { description: "unrelated entry", map: { run: "command" }, selected: [undefined, "command", undefined] },
+    {
+      description: "explicit own entries",
+      map: { toString: "operation", constructor: "command" },
+      selected: ["command", undefined, "operation"],
+    },
+  ]
+
+  for (const fixture of cases) {
+    testEffect(Layer.empty).live(`does not select inherited MCP permission map entries (${fixture.description})`, () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          replaceTools: ["toString", "constructor", "run"].map((name) => ({
+            name,
+            inputSchema: { type: "object", properties: {} },
+          })),
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.connect("resources")
+          const discovered = yield* service.tools()
+          expect(discovered.map((tool) => tool.name)).toEqual(["constructor", "run", "toString"])
+          expect(discovered.map((tool) => tool.permissionResource)).toEqual(fixture.selected)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({
+                type: "remote",
+                url: server.url,
+                oauth: false,
+                disabled: true,
+                permission_resources: fixture.map,
+              }),
+            ),
+          ),
+        )
+      }),
+    )
+  }
+})
+
+for (const selected of [false, true]) {
+  testEffect(Layer.empty).live(
+    `uses whole-server configuration precedence for MCP permission resources (${selected})`,
+    () => {
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+      })
+      return Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* service.connect("resources")
+        expect((yield* service.tools()).map((tool) => tool.permissionResource)).toEqual([
+          selected ? "operation" : undefined,
+          undefined,
+        ])
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(config, undefined, undefined, {
+            entries: () =>
+              Effect.succeed(
+                [{ first: "command" }, selected ? { first: "operation" } : undefined].map(
+                  (permission_resources) =>
+                    new Document({
+                      type: "document",
+                      info: new Info({
+                        mcp: new ConfigMCP.Info({
+                          servers: { resources: new ConfigMCP.Local({ ...config, permission_resources }) },
+                        }),
+                      }),
+                    }),
+                ),
+              ),
+          }),
+        ),
+      )
+    },
+  )
+}
+
 test("restores runtime MCP config when a transform is disposed", async () => {
   await Effect.runPromise(
     Effect.scoped(
@@ -3019,6 +3140,359 @@ testEffect(Layer.empty).effect("flush stops waiting for a hung server when its s
     )
   }),
 )
+describe("MCP permission resources", () => {
+  const tool = (input: { name?: string; codemode?: boolean; permissionResource?: string } = {}) =>
+    ({
+      server: Mcp.ServerName.make("shield"),
+      name: "oam_command",
+      codemode: false,
+      inputSchema: { type: "object", additionalProperties: true },
+      ...input,
+    }) satisfies Mcp.Tool
+  const layer = (
+    tools: Mcp.Interface["tools"],
+    asserted: Permission.AssertInput[],
+    invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]>,
+    decide: Permission.Interface["assert"] = () => Effect.void,
+  ) =>
+    Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        Mcp.node.replace(
+          Layer.mock(Mcp.Service, {
+            tools,
+            awaitStartup: () => Effect.void,
+            callTool: (input) =>
+              Effect.sync(() => {
+                invoked.push(input)
+                return { server: Mcp.ServerName.make(input.server), tool: input.name, isError: false, content: [] }
+              }),
+          }),
+        ),
+        ...toolNodeReplacements(
+          Layer.mock(Permission.Service, {
+            assert: (input) => Effect.sync(() => asserted.push(input)).pipe(Effect.andThen(decide(input))),
+          }),
+        ),
+      ]),
+    )
+
+  for (const codemode of [false, true]) {
+    testEffect(Layer.empty).live(
+      `uses selected MCP resources through ${codemode ? "Code Mode" : "direct tools"}`,
+      () => {
+        const asserted: Permission.AssertInput[] = []
+        const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+        const selected = tool({ codemode, permissionResource: "command" })
+        const sessionID = Session.ID.make("ses_mcp_selected")
+        return Effect.gen(function* () {
+          const registry = yield* Tool.Service
+          const registration = yield* McpTool.Service
+          yield* registration.flush
+          for (const input of [
+            { command: "monitor.processes.show", arguments: { class: "redis" }, oam_instance: "monitor-000" },
+            { command: "sysinfo.hostname.get", arguments: { id: 7 }, oam_class: "monitor" },
+            { command: "sysinfo.hostname.get", arguments: { id: 42 }, oam_instance: "monitor-000" },
+            { command: "  a.*.get  " },
+          ]) {
+            expect(
+              yield* executeTool(registry, {
+                sessionID,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: "call_selected",
+                  name: codemode ? "execute" : "shield_oam_command",
+                  input: codemode ? { code: `return await tools.shield.oam_command(${JSON.stringify(input)})` } : input,
+                },
+              }),
+            ).toMatchObject({ status: "completed" })
+            expect(asserted.at(-1)).toEqual({
+              action: "shield_oam_command",
+              resources: [input.command],
+              save: [input.command],
+              metadata: { input },
+              sessionID,
+              agent: toolIdentity.agent,
+              source: { type: "tool", messageID: toolIdentity.messageID, id: "call_selected" },
+            })
+            expect(invoked.at(-1)).toEqual({ server: "shield", name: "oam_command", args: input, sessionID })
+          }
+        }).pipe(Effect.provide(layer(() => Effect.succeed([selected]), asserted, invoked)))
+      },
+    )
+  }
+
+  testEffect(Layer.empty).live("leaves unconfigured MCP tools at whole-tool scope", () => {
+    const asserted: Permission.AssertInput[] = []
+    const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+    return Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      yield* registration.flush
+      for (const name of ["shield_oam_command", "shield_canary_oam_command"]) {
+        expect(
+          yield* executeTool(registry, {
+            sessionID: Session.ID.make("ses_mcp_unselected"),
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call_unselected", name, input: { command: "sysinfo.hostname.get" } },
+          }),
+        ).toMatchObject({ status: "completed" })
+        expect(asserted.at(-1)).toMatchObject({ action: name, resources: ["*"], save: ["*"] })
+      }
+      expect(invoked).toHaveLength(2)
+    }).pipe(
+      Effect.provide(layer(() => Effect.succeed([tool(), tool({ name: "canary_oam_command" })]), asserted, invoked)),
+    )
+  })
+
+  for (const field of ["operation", "operation.name"]) {
+    testEffect(Layer.empty).live(`selects the literal top-level MCP argument ${field}`, () => {
+      const asserted: Permission.AssertInput[] = []
+      const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+      return Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const registration = yield* McpTool.Service
+        yield* registration.flush
+        expect(
+          yield* executeTool(registry, {
+            sessionID: Session.ID.make("ses_mcp_literal_field"),
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call_literal",
+              name: "shield_oam_command",
+              input: { [field]: "sysinfo.cpu.get" },
+            },
+          }),
+        ).toMatchObject({ status: "completed" })
+        expect(asserted[0]).toMatchObject({
+          action: "shield_oam_command",
+          resources: ["sysinfo.cpu.get"],
+          save: ["sysinfo.cpu.get"],
+        })
+        expect(invoked[0]).toMatchObject({ name: "oam.command", args: { [field]: "sysinfo.cpu.get" } })
+        if (field !== "operation.name") return
+        expect(
+          yield* executeTool(registry, {
+            sessionID: Session.ID.make("ses_mcp_literal_field"),
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call_nested",
+              name: "shield_oam_command",
+              input: { operation: { name: "sysinfo.cpu.get" } },
+            },
+          }),
+        ).toMatchObject({ status: "error" })
+        expect(asserted).toHaveLength(1)
+        expect(invoked).toHaveLength(1)
+      }).pipe(
+        Effect.provide(
+          layer(() => Effect.succeed([tool({ name: "oam.command", permissionResource: field })]), asserted, invoked),
+        ),
+      )
+    })
+  }
+
+  testEffect(Layer.empty).live("rejects malformed selected MCP resources before authorization", () => {
+    const asserted: Permission.AssertInput[] = []
+    const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+    return Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      yield* registration.flush
+      for (const value of [undefined, null, "", 1, true, [], {}]) {
+        const result = yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_invalid_resource"),
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call_invalid",
+            name: "shield_oam_command",
+            input: value === undefined ? {} : { command: value },
+          },
+        })
+        expect(result.status).toBe("error")
+        expect(result.error?.message).toContain("oam_command")
+        expect(result.error?.message).toContain("command")
+      }
+      expect(asserted).toEqual([])
+      expect(invoked).toEqual([])
+    }).pipe(Effect.provide(layer(() => Effect.succeed([tool({ permissionResource: "command" })]), asserted, invoked)))
+  })
+
+  testEffect(Layer.empty).live("isolates parallel Code Mode MCP permission resources", () =>
+    Effect.gen(function* () {
+      const asserted: Permission.AssertInput[] = []
+      const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+      const ready = yield* Deferred.make<void>()
+      const first = yield* Deferred.make<void>()
+      const second = yield* Deferred.make<void>()
+      const called = yield* Deferred.make<void>()
+      yield* Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const registration = yield* McpTool.Service
+        yield* registration.flush
+        const execution = yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_parallel"),
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call_parallel",
+            name: "execute",
+            input: {
+              code: 'return await Promise.all([tools.shield.oam_command({command:"sysinfo.cpu.get"}), tools.shield.oam_command({command:"sysinfo.hostname.get"})])',
+            },
+          },
+        }).pipe(Effect.forkScoped)
+        yield* Deferred.await(ready)
+        expect(asserted.map((input) => input.resources)).toEqual([["sysinfo.cpu.get"], ["sysinfo.hostname.get"]])
+        expect(asserted.map((input) => input.save)).toEqual([["sysinfo.cpu.get"], ["sysinfo.hostname.get"]])
+        expect(asserted.map((input) => input.source)).toEqual(
+          Array.from({ length: 2 }, () => ({ type: "tool", messageID: toolIdentity.messageID, id: "call_parallel" })),
+        )
+        expect(invoked).toEqual([])
+        yield* Deferred.succeed(first, undefined)
+        yield* Deferred.await(called)
+        expect(invoked.map((input) => input.args)).toEqual([{ command: "sysinfo.cpu.get" }])
+        yield* Deferred.succeed(second, undefined)
+        expect(yield* Fiber.join(execution)).toMatchObject({ status: "completed" })
+        expect(invoked.map((input) => input.args)).toEqual([
+          { command: "sysinfo.cpu.get" },
+          { command: "sysinfo.hostname.get" },
+        ])
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            Mcp.node.replace(
+              Layer.mock(Mcp.Service, {
+                tools: () => Effect.succeed([tool({ codemode: true, permissionResource: "command" })]),
+                awaitStartup: () => Effect.void,
+                callTool: (input) =>
+                  Effect.sync(() => invoked.push(input)).pipe(
+                    Effect.andThen(Deferred.succeed(called, undefined)),
+                    Effect.as({
+                      server: Mcp.ServerName.make("shield"),
+                      tool: "oam_command",
+                      isError: false,
+                      content: [],
+                    }),
+                  ),
+              }),
+            ),
+            ...toolNodeReplacements(
+              Layer.mock(Permission.Service, {
+                assert: (input) =>
+                  Effect.sync(() => asserted.push(input)).pipe(
+                    Effect.andThen(
+                      Effect.gen(function* () {
+                        if (asserted.length === 2) yield* Deferred.succeed(ready, undefined)
+                        yield* Deferred.await(input.resources[0] === "sysinfo.cpu.get" ? first : second)
+                      }),
+                    ),
+                  ),
+              }),
+            ),
+          ]),
+        ),
+      )
+    }),
+  )
+
+  testEffect(Layer.empty).live("refreshes selected MCP resources with the tool catalog", () =>
+    Effect.gen(function* () {
+      const asserted: Permission.AssertInput[] = []
+      const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+      const catalog = yield* Ref.make([tool({ permissionResource: "command" })])
+      yield* Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const registration = yield* McpTool.Service
+        const bus = yield* Bus.Service
+        yield* registration.flush
+        yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_refresh_resource"),
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call_before",
+            name: "shield_oam_command",
+            input: { command: "sysinfo.cpu.get" },
+          },
+        })
+        yield* Ref.set(catalog, [tool({ permissionResource: "operation" }), tool({ name: "refreshed" })])
+        yield* bus.publish(McpEvent.ToolsChanged, { server: "shield" })
+        yield* waitForTool(registry, "shield_refreshed")
+        yield* executeTool(registry, {
+          sessionID: Session.ID.make("ses_mcp_refresh_resource"),
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call_after",
+            name: "shield_oam_command",
+            input: { command: "wrong", operation: "sysinfo.hostname.get" },
+          },
+        })
+        expect(asserted.map((input) => input.resources)).toEqual([["sysinfo.cpu.get"], ["sysinfo.hostname.get"]])
+        expect(invoked).toHaveLength(2)
+      }).pipe(Effect.provide(layer(() => Ref.get(catalog), asserted, invoked)))
+    }),
+  )
+
+  for (const blocked of [false, true]) {
+    testEffect(Layer.empty).live(
+      `${blocked ? "blocks" : "waits for"} permission for a selected MCP command before calling MCP`,
+      () =>
+        Effect.gen(function* () {
+          const asserted: Permission.AssertInput[] = []
+          const invoked: Array<Parameters<Mcp.Interface["callTool"]>[0]> = []
+          const ready = yield* Deferred.make<void>()
+          const decision = yield* Deferred.make<void, Permission.BlockedError>()
+          yield* Effect.gen(function* () {
+            const registry = yield* Tool.Service
+            const registration = yield* McpTool.Service
+            yield* registration.flush
+            const execution = yield* executeTool(registry, {
+              sessionID: Session.ID.make("ses_mcp_resource_decision"),
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call_decision",
+                name: "shield_oam_command",
+                input: { command: "sysinfo.cpu.extended_show" },
+              },
+            }).pipe(Effect.forkScoped)
+            yield* Deferred.await(ready)
+            expect(asserted[0]).toMatchObject({
+              resources: ["sysinfo.cpu.extended_show"],
+              save: ["sysinfo.cpu.extended_show"],
+            })
+            expect(invoked).toEqual([])
+            if (blocked)
+              yield* Deferred.fail(
+                decision,
+                new Permission.BlockedError({
+                  rules: [],
+                  permission: "shield_oam_command",
+                  resources: ["sysinfo.cpu.extended_show"],
+                }),
+              )
+            if (!blocked) yield* Deferred.succeed(decision, undefined)
+            expect(yield* Fiber.join(execution)).toMatchObject({ status: blocked ? "error" : "completed" })
+            expect(invoked).toHaveLength(blocked ? 0 : 1)
+          }).pipe(
+            Effect.provide(
+              layer(
+                () => Effect.succeed([tool({ permissionResource: "command" })]),
+                asserted,
+                invoked,
+                () => Deferred.succeed(ready, undefined).pipe(Effect.andThen(Deferred.await(decision))),
+              ),
+            ),
+          )
+        }),
+    )
+  }
+})
 
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {

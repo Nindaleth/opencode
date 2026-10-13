@@ -71,18 +71,25 @@ export const layer = Layer.effect(
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
+                    const args = (input ?? {}) as Record<string, unknown>
+                    const resource = tool.permissionResource === undefined ? "*" : args[tool.permissionResource]
+                    if (typeof resource !== "string" || resource.length === 0)
+                      return yield* new ToolFailure({
+                        message: `MCP tool "${name(tool.server, tool.name)}" requires a non-empty string argument "${tool.permissionResource}" for permission checks`,
+                      })
+                    const resources = [resource]
                     yield* permission.assert({
                       action: name(tool.server, tool.name),
-                      resources: ["*"],
-                      save: ["*"],
-                      metadata: { input: input ?? {} },
+                      resources,
+                      save: resources,
+                      metadata: { input: args },
                       ...Permission.invocation(context),
                     })
                     const result = yield* mcp
                       .callTool({
                         server: tool.server,
                         name: tool.name,
-                        args: (input ?? {}) as Record<string, unknown>,
+                        args,
                         sessionID: context.sessionID,
                       })
                       .pipe(

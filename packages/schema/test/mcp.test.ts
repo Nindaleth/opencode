@@ -30,6 +30,36 @@ describe("Mcp remote TLS configuration", () => {
   })
 })
 
+describe("Mcp permission resources", () => {
+  const maps: ReadonlyArray<Record<string, string> | undefined> = [
+    { oam_command: "command", inspect: "operation" },
+    {},
+    undefined,
+  ]
+  for (const server of [
+    { type: "local", command: ["server"] },
+    { type: "remote", url: "https://localhost/mcp" },
+  ] as const) {
+    for (const permission_resources of maps) {
+      test(`round-trips ${server.type} permission_resources: ${JSON.stringify(permission_resources)}`, () => {
+        const input = { ...server, ...(permission_resources === undefined ? {} : { permission_resources }) }
+        expect(Schema.encodeSync(Mcp.ServerConfig)(Schema.decodeUnknownSync(Mcp.ServerConfig)(input))).toEqual(input)
+      })
+    }
+
+    for (const permission_resources of [
+      null,
+      [],
+      "command",
+      ...["", null, 1, true, [], {}].map((value) => ({ oam_command: value })),
+    ]) {
+      test(`rejects ${server.type} permission_resources: ${JSON.stringify(permission_resources)}`, () => {
+        expect(() => Schema.decodeUnknownSync(Mcp.ServerConfig)({ ...server, permission_resources })).toThrow()
+      })
+    }
+  }
+})
+
 describe("Mcp resources", () => {
   test("decodes resource catalogs and omits absent metadata", () => {
     const value = Schema.decodeUnknownSync(Mcp.ResourceCatalog)({

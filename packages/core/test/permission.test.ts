@@ -98,6 +98,63 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("matches multiple MCP command glob rules", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shield_oam_command", resource: "*", effect: "ask" },
+        { action: "shield_oam_command", resource: "*.*.get", effect: "allow" },
+        { action: "shield_oam_command", resource: "*.*.show", effect: "allow" },
+        { action: "shield_oam_command", resource: "*.checkout", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      for (const [resource, effect] of [
+        ["sysinfo.hostname.get", "allow"],
+        ["a.b.c.get", "allow"],
+        ["sysinfo.cpu.show", "allow"],
+        ["sysinfo.get", "ask"],
+        ["sysinfo.cpu.extended_show", "ask"],
+        ["configuration.active.checkout", "deny"],
+      ]) {
+        expect(
+          yield* service.ask(
+            assertion({
+              id: Permission.ID.create(`per_${resource}`),
+              action: "shield_oam_command",
+              resources: [resource],
+            }),
+          ),
+        ).toMatchObject({ effect })
+      }
+    }),
+  )
+
+  it.effect("remembers one MCP command without allowing another", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shield_oam_command", resource: "*", effect: "ask" }])
+      const saved = yield* PermissionSaved.Service
+      const { service, fiber, request } = yield* waitForRequest({
+        action: "shield_oam_command",
+        resources: ["sysinfo.cpu.extended_show"],
+        save: ["sysinfo.cpu.extended_show"],
+      })
+      yield* service.reply({ requestID: request.id, reply: "always" })
+      yield* Fiber.join(fiber)
+      expect(yield* saved.list()).toMatchObject([
+        { action: "shield_oam_command", resource: "sysinfo.cpu.extended_show" },
+      ])
+      expect(
+        yield* service.ask(assertion({ action: "shield_oam_command", resources: ["sysinfo.cpu.extended_show"] })),
+      ).toMatchObject({ effect: "allow" })
+      expect(
+        yield* service.ask(assertion({ action: "shield_oam_command", resources: ["sysinfo.hostname.extended_show"] })),
+      ).toMatchObject({ effect: "ask" })
+      yield* setRules([{ action: "shield_oam_command", resource: "sysinfo.cpu.extended_show", effect: "deny" }])
+      expect(
+        yield* service.ask(assertion({ action: "shield_oam_command", resources: ["sysinfo.cpu.extended_show"] })),
+      ).toMatchObject({ effect: "deny" })
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

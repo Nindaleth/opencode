@@ -89,6 +89,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
       command: info.command,
       cwd: info.cwd,
       environment: info.environment,
+      ...(info.permission_resources === undefined ? {} : { permission_resources: info.permission_resources }),
       disabled,
       codemode: info.codemode,
       timeout: info.timeout === undefined ? undefined : migrateMcpTimeout(info.timeout),
@@ -97,6 +98,7 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
     type: info.type,
     url: info.url,
     headers: info.headers,
+    ...(info.permission_resources === undefined ? {} : { permission_resources: info.permission_resources }),
     ...(info.skip_tls_verify === undefined ? {} : { skip_tls_verify: info.skip_tls_verify }),
     oauth: info.oauth && {
       client_id: info.oauth.clientId,
