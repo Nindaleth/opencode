@@ -3,7 +3,7 @@ import { Predicate } from "effect"
 import { abort } from "@opencode/util/abort"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import type { SessionUserActions } from "@opencode/session-ui/actions"
+import type { SessionNextStepsActions, SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -81,6 +81,7 @@ type MessageTimelineProps = {
   screen: SessionScreen
   background: SessionBackground
   actions?: SessionUserActions
+  nextSteps?: SessionNextStepsActions
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
@@ -319,6 +320,7 @@ function MessageTimelineView(
       }
     },
     actions: props.actions,
+    nextSteps: props.nextSteps,
     timelineDetail: props.data.timelineDetail,
     disclosure: virtualized.disclosure,
     centered: () => props.centered,

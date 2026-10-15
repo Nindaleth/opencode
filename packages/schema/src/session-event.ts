@@ -163,7 +163,7 @@ export const UsageRecorded = Event.durable({
   ...options,
   schema: {
     ...Base,
-    source: Schema.Literals(["title", "compaction", "generate"]),
+    source: Schema.Literals(["title", "compaction", "generate", "next-steps"]),
     cost: Money.USD,
     tokens: TokenUsage.Info,
   },

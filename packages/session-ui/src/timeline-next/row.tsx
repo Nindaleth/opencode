@@ -26,7 +26,12 @@ import { Icon } from "@opencode/ui/icon"
 import { Spring, frameLoop, prefersReducedMotion } from "@opencode/ui/motion"
 import { springStyle } from "@opencode/ui/motion/solid"
 import { Dynamic } from "solid-js/web"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionNextStepsActions,
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+} from "../actions"
 import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
@@ -89,6 +94,7 @@ export function createNextTimelineRowRenderer(input: {
   projection: Projection
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
+  nextSteps?: SessionNextStepsActions
   timelineDetail: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
   disclosure: {
@@ -579,6 +585,7 @@ export function createNextTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                nextSteps={input.nextSteps}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}

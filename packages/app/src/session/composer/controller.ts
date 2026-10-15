@@ -9,6 +9,7 @@ import { createActiveComposerAdapter } from "./adapter"
 import { useComposerFocus } from "./focus"
 import { needsRealComposerFocus } from "./focus-machine"
 import { createSessionQueue } from "./queue"
+import { hasDraftContent, installNextStep } from "../next-steps/draft"
 import { createSessionComposerRegionController } from "./session-composer-region-controller"
 
 export function createSessionComposerController(input: {
@@ -37,21 +38,23 @@ export function createSessionComposerController(input: {
     },
   })
 
+  const restoreFocus = (cursor: number) => {
+    const target = editor()
+
+    if (!target) return
+    requestAnimationFrame(() => {
+      target.focus()
+      setCursorPosition(target, cursor)
+    })
+  }
+
   const queue = createSessionQueue({
     sessionID: input.sessionID,
     draft: adapter.state,
     working: adapter.working,
     behavior: settings.general.followUpBehavior,
     background,
-    restoreFocus: (cursor) => {
-      const target = editor()
-
-      if (!target) return
-      requestAnimationFrame(() => {
-        target.focus()
-        setCursorPosition(target, cursor)
-      })
-    },
+    restoreFocus,
   })
 
   const composer = createComposerModel(adapter, { queue })
@@ -78,6 +81,13 @@ export function createSessionComposerController(input: {
       active: () => editable() && composer.state.drag === "active",
       input: () => composer.model.selection.current()?.capabilities.input,
     },
+    hasDraft: () =>
+      hasDraftContent({
+        prompt: adapter.state.current(),
+        context: adapter.state.context.items().length,
+        editing: queue.editing() !== undefined,
+      }),
+    installNextStep: (text: string) => installNextStep({ draft: adapter.state, queue, restoreFocus }, text),
   }
 }
 

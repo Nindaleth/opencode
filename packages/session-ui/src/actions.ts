@@ -52,3 +52,9 @@ export type SessionUserActions = {
     remove: (input: { sessionID: string; messageID: string }) => Promise<void>
   }
 }
+
+/** Messages the user could send next, offered beneath the final reply text of a finished turn. */
+export type SessionNextStepsActions = {
+  items: (messageID: string) => readonly string[]
+  select: (messageID: string, text: string) => void
+}

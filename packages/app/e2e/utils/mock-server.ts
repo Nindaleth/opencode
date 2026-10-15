@@ -166,6 +166,7 @@ export interface MockServerConfig {
   // answer to replace the response.
   onFork?: (input: { sessionID: string; body: Schema.JsonObject }) => void | MockAnswer | Promise<void | MockAnswer>
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
+  nextSteps?: (input: { sessionID: string; messageID: string; idleID: string }) => Promise<readonly string[]>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
   // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
@@ -1340,6 +1341,13 @@ function mockHandlers(
           Effect.promise(async () => ({
             data: (await config.generate?.({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })) ?? {
               text: "Side-question answer",
+            },
+          })),
+        sessionNextSteps: (ctx) =>
+          Effect.promise(async () => ({
+            data: {
+              ...ctx.payload,
+              nextSteps: (await config.nextSteps?.({ sessionID: ctx.params.sessionID, ...ctx.payload })) ?? [],
             },
           })),
         sessionInboxCancel: (ctx) =>

@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
+import type { SessionNextStepsActions } from "../../actions"
 import { ArtifactContent } from "../../message/artifact-content"
 import { AssistantTextContent } from "../../message/message-content"
 import {
@@ -19,6 +20,7 @@ export function AssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
+  nextSteps?: SessionNextStepsActions
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   sources?: TurnSources
@@ -45,6 +47,8 @@ export function AssistantContent(props: {
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
+            nextSteps={props.nextSteps}
+            onContentRendered={props.onContentRendered}
           />
         )}
       </Match>

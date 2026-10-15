@@ -466,6 +466,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionNextSteps", "/api/session/:sessionID/next-steps", {
+      params: SessionParams,
+      payload: Schema.Struct({ messageID: Schema.String, idleID: Schema.String }),
+      success: Json,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionSwitchAgent", "/api/session/:sessionID/agent", {
       params: SessionParams,
       payload: JsonPayload,

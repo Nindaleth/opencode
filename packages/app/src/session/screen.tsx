@@ -299,6 +299,7 @@ function SessionScreenContent(props: {
             screen={props.screen}
             background={composer.requests.background}
             actions={actions}
+            nextSteps={composer.nextSteps}
             scroll={timeline.scroll}
             onResumeScroll={timeline.actions.resume}
             setScrollRef={timeline.view.setScrollRef}
