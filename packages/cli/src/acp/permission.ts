@@ -67,7 +67,7 @@ export const ask = Effect.fnUntraced(function* (input: Input) {
       ...(previews.length > 0 ? { content: previews } : {}),
       ...(input.child ? { _meta: ACPChild.meta(input.child) } : {}),
     },
-    options,
+    options: input.event.data.save?.length ? options : options.filter((option) => option.optionId !== "always"),
   })
   const selected = result.outcome.outcome === "selected" ? result.outcome.optionId : undefined
   return selected === "once" || selected === "always" ? selected : "reject"

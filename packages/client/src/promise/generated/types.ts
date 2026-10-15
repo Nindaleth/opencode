@@ -425,7 +425,7 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
   [x: string]: JsonValue | null
 }
 
-export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
+export type PermissionRule = { action: string; resource: string; effect: PermissionEffect; offer_always?: boolean }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
 
@@ -3469,7 +3469,12 @@ export type SessionCreateInput = {
   readonly location?: { readonly directory: string } | null | undefined
   readonly metadata?: { readonly [x: string]: JsonValue } | null | undefined
   readonly permissions?:
-    | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
+    | ReadonlyArray<{
+        readonly action: string
+        readonly resource: string
+        readonly effect: "allow" | "deny" | "ask"
+        readonly offer_always?: boolean
+      }>
     | null
     | undefined
 }
@@ -3503,12 +3508,18 @@ export type SessionSwitchModelOutput = void
 
 export type SessionUpdateInput = {
   readonly sessionID: string
-  readonly title?: string | undefined
-  readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+  readonly title?: string | null | undefined
+  readonly metadata?: { readonly [x: string]: JsonValue } | null | undefined
   readonly permissions?:
-    | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
+    | ReadonlyArray<{
+        readonly action: string
+        readonly resource: string
+        readonly effect: "allow" | "deny" | "ask"
+        readonly offer_always?: boolean
+      }>
+    | null
     | undefined
-  readonly archived?: boolean | undefined
+  readonly archived?: boolean | null | undefined
 }
 
 export type SessionUpdateOutput = void
@@ -3976,6 +3987,7 @@ export type ExperimentalSessionImportInput = {
       readonly action: string
       readonly resource: string
       readonly effect: "allow" | "deny" | "ask"
+      readonly offer_always?: boolean
     }>
     readonly revert?: {
       readonly messageID: string

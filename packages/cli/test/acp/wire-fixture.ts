@@ -417,6 +417,7 @@ export function permissionAsked(
   input: {
     readonly action?: string
     readonly resources?: EventData<"permission.asked">["resources"]
+    readonly save?: EventData<"permission.asked">["save"]
     readonly metadata?: EventData<"permission.asked">["metadata"]
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
@@ -426,6 +427,7 @@ export function permissionAsked(
     sessionID,
     action: input.action ?? "shell",
     resources: input.resources ?? ["*"],
+    ...(input.save ? { save: input.save } : {}),
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
   })

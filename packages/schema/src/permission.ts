@@ -61,6 +61,7 @@ export const Rule = Schema.Struct({
   action: Schema.String,
   resource: Schema.String,
   effect: Effect,
+  offer_always: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Permission.Rule" })
 
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
