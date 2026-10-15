@@ -1,6 +1,11 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionNextStepsActions,
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+} from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
   CurrentContextToolGroup,
@@ -13,7 +18,12 @@ import type { UserRun } from "../timeline/user-runs"
 import type { TurnSources } from "../sources/sources"
 import { ArtifactContent } from "./artifact-content"
 
-export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+export type {
+  SessionNextStepsActions,
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+} from "../actions"
 
 export { SessionShellMessage } from "../tools/tool-renderer"
 
@@ -75,6 +85,7 @@ export function SessionAssistantContent(props: {
   reasoningDefaultOpen?: boolean
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
+  nextSteps?: SessionNextStepsActions
   onContentRendered?: () => void
 }) {
   return (
@@ -90,6 +101,8 @@ export function SessionAssistantContent(props: {
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
+            nextSteps={props.nextSteps}
+            onContentRendered={props.onContentRendered}
           />
         )}
       </Match>

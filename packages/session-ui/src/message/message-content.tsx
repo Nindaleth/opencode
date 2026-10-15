@@ -53,7 +53,12 @@ import type {
   SessionMessageCompaction,
   SessionMessageUser,
 } from "@opencode/client/promise"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionNextStepsActions,
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+} from "../actions"
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
@@ -836,12 +841,10 @@ function CurrentHighlightedText(props: { text: string; files: PromptAttachment[]
     // Plain text between references may contain URLs, which become links.
     const pushText = (text: string) =>
       result.push(
-        ...linkSegments(text).map(
-          (segment): HighlightSegment => ({
-            text: segment.text,
-            type: segment.href ? "link" : undefined,
-          }),
-        ),
+        ...linkSegments(text).map((segment): HighlightSegment => ({
+          text: segment.text,
+          type: segment.href ? "link" : undefined,
+        })),
       )
 
     let last = 0
@@ -1124,6 +1127,8 @@ export function AssistantTextContent(props: {
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
+  nextSteps?: SessionNextStepsActions
+  onContentRendered?: () => void
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -1175,6 +1180,10 @@ export function AssistantTextContent(props: {
     ),
   ])
 
+  const nextSteps = createMemo(() => (props.showCopy ? (props.nextSteps?.items(props.message.id) ?? []) : []))
+
+  createEffect(on(nextSteps, () => props.onContentRendered?.(), { defer: true }))
+
   const speed = createMemo(() => {
     if (props.turnTokensPerSecond === undefined) return undefined
 
@@ -1206,6 +1215,20 @@ export function AssistantTextContent(props: {
               {copyFooter()}
             </div>
           )}
+        </Show>
+        <Show when={nextSteps().length > 0}>
+          <div data-slot="text-part-next-steps">
+            <span data-slot="text-part-next-steps-label" class="text-12-regular text-text-weak">
+              {i18n.t("ui.message.nextSteps.label")}
+            </span>
+            <For each={nextSteps()}>
+              {(text) => (
+                <Button size="small" variant="outline" onClick={() => props.nextSteps?.select(props.message.id, text)}>
+                  {text}
+                </Button>
+              )}
+            </For>
+          </div>
         </Show>
       </div>
     </Show>

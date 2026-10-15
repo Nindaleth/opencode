@@ -24,6 +24,8 @@ import {
   compactionRunningDocument,
   instructionsUpdatedMultipleDocument,
   instructionsUpdatedSingleDocument,
+  nextStepsDocument,
+  nextStepsItems,
   requestHistoryDocument,
   retryDocument,
   revertDocument,
@@ -584,6 +586,18 @@ export const AnsweredQuestionAndDeclinedCommand = {
       document={requestHistoryDocument}
       width="620px"
       shellToolDefaultOpen
+    />
+  ),
+}
+
+export const NextSteps = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Next steps"
+      description="Suggested next messages sit beneath the final reply of the latest finished turn only."
+      document={nextStepsDocument}
+      nextSteps={nextStepsItems}
+      width="620px"
     />
   ),
 }

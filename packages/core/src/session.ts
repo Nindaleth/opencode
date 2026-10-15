@@ -48,6 +48,7 @@ import { SessionEvent } from "./session/event.js"
 import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
 import { SessionGenerate } from "./session/generate.js"
+import { SessionNextSteps } from "./session/next-steps.js"
 import { SessionCommand } from "./session/command.js"
 import {
   SessionMove,
@@ -216,6 +217,8 @@ export interface Interface {
     sessionID: SessionSchema.ID
     prompt: string
   }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
+  /** Suggests messages the user could send after the target reply; empty when the Session is busy or the target is stale. */
+  readonly nextSteps: (target: SessionNextSteps.Target) => Effect.Effect<ReadonlyArray<string>, NotFoundError>
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -533,6 +536,19 @@ const layer = Layer.effect(
           Effect.provideService(LLMClient.Service, llm),
           Effect.provideService(Bus.Service, bus),
         )
+      }),
+      nextSteps: Effect.fn("Session.nextSteps")(function* (target) {
+        const session = yield* result.get(target.sessionID)
+        if (yield* execution.isActive(session.id)) return []
+        const nextSteps = yield* Effect.gen(function* () {
+          const service = yield* SessionNextSteps.Service
+          return yield* service.generate(target)
+        }).pipe(
+          instances.provide(session),
+          Effect.catchCause(() => Effect.succeed<ReadonlyArray<string>>([])),
+        )
+        if (yield* execution.isActive(session.id)) return []
+        return nextSteps
       }),
       command: Effect.fn("Session.command")(function* (input) {
         const session = yield* result.get(input.sessionID)

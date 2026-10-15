@@ -138,6 +138,7 @@ const generalSchema = Persistence.struct({
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  nextSteps: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -310,6 +311,7 @@ export const defaultSettings: Settings = {
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
+    nextSteps: true,
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
@@ -440,6 +442,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
+        },
+        nextSteps: withFallback(() => store.general?.nextSteps, defaultSettings.general.nextSteps),
+        setNextSteps(value: boolean) {
+          setStore("general", "nextSteps", value)
         },
       },
       visibility: {

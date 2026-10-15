@@ -1,7 +1,7 @@
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
 import { DataProvider, type ReadMediaUrlFn, type TurnDiffSource } from "../context/data"
-import type { SessionUserActions } from "../message/current-message"
+import type { SessionNextStepsActions, SessionUserActions } from "../message/current-message"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 import { SessionTimeline } from "../timeline/session-timeline"
 import { FileComponentProvider } from "@opencode/ui/context/file"
@@ -90,6 +90,7 @@ export function CurrentSessionTimelineStory(props: {
   description: string
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
+  nextSteps?: Record<string, readonly string[]>
   width?: string
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
@@ -114,6 +115,13 @@ export function CurrentSessionTimelineStory(props: {
       setActivity(`Forked from ${input.messageID}`)
     },
   } satisfies SessionUserActions
+
+  const nextSteps = {
+    items: (messageID) => props.nextSteps?.[messageID] ?? [],
+    select: (messageID, text) => {
+      setActivity(`Selected next step ${messageID}: ${text}`)
+    },
+  } satisfies SessionNextStepsActions
 
   const reset = () => {
     setActivity("No local action")
@@ -145,6 +153,7 @@ export function CurrentSessionTimelineStory(props: {
                   document={document()}
                   presentation={props.presentation}
                   actions={actions}
+                  nextSteps={props.nextSteps && nextSteps}
                   shellToolDefaultOpen={props.shellToolDefaultOpen}
                   editToolDefaultOpen={props.editToolDefaultOpen}
                   turnDiffs={props.turnDiffs}

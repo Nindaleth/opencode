@@ -65,6 +65,8 @@ import type {
   SessionInboxUpdateOutput,
   SessionGenerateInput,
   SessionGenerateOutput,
+  SessionNextStepsInput,
+  SessionNextStepsOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
   SessionBackgroundInput,
@@ -931,6 +933,18 @@ export function make(options: ClientOptions) {
             body: { prompt: input["prompt"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      nextSteps: (input: SessionNextStepsInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionNextStepsOutput }>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/next-steps`,
+            body: { messageID: input["messageID"], idleID: input["idleID"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,

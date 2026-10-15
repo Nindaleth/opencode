@@ -659,6 +659,31 @@
     flex: none;
   }
 
+  [data-slot="text-part-next-steps"] {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+
+    [data-component="button-v2"] {
+      /* button.css is unlayered, so it beats this layered file unless the declaration is !important */
+      height: auto !important;
+      min-height: 24px;
+      max-width: 100%;
+      padding-block: 2px !important;
+      justify-content: flex-start;
+      text-align: start;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="text-part-next-steps-label"] {
+    line-height: var(--line-height-compact);
+    user-select: none;
+  }
+
   [data-slot="text-part-copy-wrapper"][data-interrupted] {
     width: 100%;
     justify-content: flex-end;

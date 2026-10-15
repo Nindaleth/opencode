@@ -1,4 +1,4 @@
-import type { SessionUserActions } from "@opencode/session-ui/message"
+import type { SessionNextStepsActions, SessionUserActions } from "@opencode/session-ui/message"
 import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -53,6 +53,10 @@ import { SessionLocationMissing } from "./location-missing"
 import { SessionPluginPills } from "./plugin-pills"
 import { createTimelineActions, type TimelineActionsView, type TimelinePendingActions } from "./timeline-actions"
 import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
+import { useSettings } from "@/settings/model"
+import { createNextSteps } from "../next-steps/controller"
+import { nextStepsTarget } from "../next-steps/target"
+import { ReplaceDraftDialog } from "../next-steps/replace-dialog"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -72,6 +76,7 @@ export function createActiveSessionRegion(input: {
   const platform = usePlatform()
   const prompt = useComposerState()
   const state = createSessionRequestModel()
+  const settings = useSettings()
   const controls = createComposerControls()
   let promptRef: HTMLDivElement | undefined
 
@@ -373,6 +378,37 @@ export function createActiveSessionRegion(input: {
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
 
+  const nextSteps = createNextSteps({
+    target: () => {
+      const sessionID = input.visible() ? input.session.identity.sessionID() : undefined
+      if (!sessionID || input.session.data.isChild()) return
+      return nextStepsTarget({
+        sessionID,
+        messages: data.session.message.list(sessionID),
+        running: data.session.status(sessionID) === "running",
+        pending: data.session.pending.list(sessionID).length,
+        blocked: state.blocked(),
+      })
+    },
+    enabled: settings.general.nextSteps,
+    request: (target, signal) => server.api.session.nextSteps(target, { signal }).then((result) => result.nextSteps),
+  })
+
+  const selectNextStep = (messageID: string, text: string) => {
+    const controller = active()
+    if (!controller) return
+    if (!controller.hasDraft()) return controller.installNextStep(text)
+    dialog.show(() => (
+      <ReplaceDraftDialog
+        onReplace={() => {
+          // The dialog may outlive the reply or the session view it was opened for.
+          if (active() !== controller || nextSteps.target()?.messageID !== messageID) return
+          controller.installNextStep(text)
+        }}
+      />
+    ))
+  }
+
   return {
     active,
     focused: () => !!promptRef?.contains(document.activeElement),
@@ -407,6 +443,10 @@ export function createActiveSessionRegion(input: {
           openAttachment,
         }),
     },
+    nextSteps: {
+      items: nextSteps.items,
+      select: selectNextStep,
+    } satisfies SessionNextStepsActions,
     requests: state,
   }
 }

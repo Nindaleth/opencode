@@ -336,6 +336,20 @@ export type SessionGenerateOperation<E = never> = (
   input: SessionGenerateInput,
 ) => Effect.Effect<SessionGenerateOutput, E>
 
+export type SessionNextStepsInput = {
+  readonly sessionID: Session.ID
+  readonly messageID: SessionMessage.ID
+  readonly idleID: SessionMessage.ID
+}
+export type SessionNextStepsOutput = {
+  readonly messageID: SessionMessage.ID
+  readonly idleID: SessionMessage.ID
+  readonly nextSteps: ReadonlyArray<string>
+}
+export type SessionNextStepsOperation<E = never> = (
+  input: SessionNextStepsInput,
+) => Effect.Effect<SessionNextStepsOutput, E>
+
 export type SessionInterruptInput = { readonly sessionID: Session.ID; readonly resume?: boolean | undefined }
 export type SessionInterruptOutput = { readonly interrupted: boolean }
 export type SessionInterruptOperation<E = never> = (
@@ -448,6 +462,7 @@ export interface SessionApi<E = never> {
     readonly update: SessionInboxUpdateOperation<E>
   }
   readonly generate: SessionGenerateOperation<E>
+  readonly nextSteps: SessionNextStepsOperation<E>
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: { readonly get: SessionMessageGetOperation<E> }
@@ -1417,7 +1432,7 @@ export type ExperimentalSessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly source: "title" | "compaction" | "generate"
+            readonly source: "title" | "compaction" | "generate" | "next-steps"
             readonly cost: Money.USD
             readonly tokens: {
               readonly input: number

@@ -563,6 +563,18 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("classifies next-steps generation as a background interaction", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const event = yield* modelRequest((yield* sessions()).parent, "generate", "next-steps")
+      expect(event.headers).toEqual({
+        "X-Interaction-Type": "conversation-background",
+        "X-Interaction-Id": event.sessionID,
+        "x-initiator": "agent",
+      })
+    }),
+  )
+
   it.effect("routes models.dev fallback models to native Copilot APIs", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

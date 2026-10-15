@@ -1222,6 +1222,35 @@ export const revertDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
+export const nextStepsDocument = document([
+  user("msg_user_next_steps_first", "Find why the Session timeline jumps after a reply.", 100_000),
+  assistant({
+    id: "msg_assistant_next_steps_first",
+    offset: 101_000,
+    completed: 103_000,
+    content: [
+      { type: "text", text: "The row height changes after the copy bar mounts, so the virtualizer re-measures late." },
+    ],
+  }),
+  user("msg_user_next_steps_final", "Fix it and keep the scroll position stable.", 104_000),
+  assistant({
+    id: "msg_assistant_next_steps_final",
+    offset: 105_000,
+    completed: 108_000,
+    content: [
+      { type: "text", text: "Measured the row after the copy bar renders and kept the anchor while reading above." },
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+export const nextStepsItems = {
+  msg_assistant_next_steps_first: ["Show me the measurement code"],
+  msg_assistant_next_steps_final: [
+    "Run the focused tests",
+    "Explain how the scroll anchor is preserved while new content arrives above the reading position in a long conversation",
+  ],
+}
+
 const largeMessages = Array.from({ length: 16 }, (_, index) => {
   const offset = 110_000 + index * 5_000
   const userID = `msg_user_large_${String(index + 1).padStart(2, "0")}`

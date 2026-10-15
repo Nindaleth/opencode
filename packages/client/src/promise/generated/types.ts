@@ -464,6 +464,8 @@ export type SessionMessageCompactionRunning = {
   summary: string
 }
 
+export type NextStepsResult = { messageID: SessionMessageID; idleID: SessionMessageID; nextSteps: Array<string> }
+
 export type UsageLimitsBudgetModel = { providerID: ProviderID; modelID: string; name: string; spent?: MoneyUSD }
 
 export type SessionGenerateResponse = { data: { text: string; tokens: TokenUsageInfo; cost: MoneyUSD } }
@@ -1099,6 +1101,8 @@ export type ModelVariant = {
 
 export type PermissionRuleset = Array<PermissionRule>
 
+export type SessionNextStepsResponse = { data: NextStepsResult }
+
 export type UsageLimitsBudget = {
   id: string
   limit: MoneyUSD
@@ -1663,7 +1667,12 @@ export type SessionUsageRecorded = {
   type: "session.usage.recorded"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; source: "title" | "compaction" | "generate"; cost: MoneyUSD; tokens: TokenUsageInfo }
+  data: {
+    sessionID: SessionID
+    source: "title" | "compaction" | "generate" | "next-steps"
+    cost: MoneyUSD
+    tokens: TokenUsageInfo
+  }
 }
 
 export type LocationShutdown = {
@@ -3546,6 +3555,10 @@ export type SessionInboxUpdateOutput = void
 export type SessionGenerateInput = { readonly sessionID: string; readonly prompt: string }
 
 export type SessionGenerateOutput = SessionGenerateResponse["data"]
+
+export type SessionNextStepsInput = { readonly sessionID: string; readonly messageID: string; readonly idleID: string }
+
+export type SessionNextStepsOutput = SessionNextStepsResponse["data"]
 
 export type SessionInterruptInput = { readonly sessionID: string; readonly resume?: boolean | undefined }
 

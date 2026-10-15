@@ -3811,6 +3811,84 @@
         }
       }
     },
+    "/api/session/{sessionID}/next-steps": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.nextSteps",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "SessionNextStepsResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNextStepsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Suggest messages the user could send after the latest successful reply. Returns an empty list when the reply is not eligible.",
+        "summary": "Suggest next steps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NextSteps.Request"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/experimental/session/{sessionID}/log": {
       "get": {
         "tags": ["session"],
@@ -21124,6 +21202,38 @@
       "Money.USDPerMillionTokens": {
         "type": "number"
       },
+      "NextSteps.Request": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "idleID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          }
+        },
+        "required": ["messageID", "idleID"],
+        "additionalProperties": false
+      },
+      "NextSteps.Result": {
+        "type": "object",
+        "properties": {
+          "messageID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "idleID": {
+            "$ref": "#/components/schemas/Session.Message.ID"
+          },
+          "nextSteps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["messageID", "idleID", "nextSteps"],
+        "additionalProperties": false
+      },
       "PairingCode": {
         "type": "object",
         "properties": {
@@ -24770,6 +24880,16 @@
           }
         },
         "required": ["data", "cursor"],
+        "additionalProperties": false
+      },
+      "SessionNextStepsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NextSteps.Result"
+          }
+        },
+        "required": ["data"],
         "additionalProperties": false
       },
       "SessionNotFoundErrorEncoded": {

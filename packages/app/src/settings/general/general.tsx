@@ -275,6 +275,18 @@ export const SettingsGeneral: Component = () => {
 
         <FollowUpBehaviorSetting />
 
+        <SettingsRow
+          title={language.t("settings.general.row.nextSteps.title")}
+          description={language.t("settings.general.row.nextSteps.description")}
+        >
+          <div data-action="settings-next-steps">
+            <Switch
+              checked={settings.general.nextSteps()}
+              onChange={(checked) => settings.general.setNextSteps(checked)}
+            />
+          </div>
+        </SettingsRow>
+
         <Show when={desktop()}>
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}

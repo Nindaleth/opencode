@@ -38,6 +38,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
+import { NextSteps } from "@opencode/schema/next-steps"
 import { PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
@@ -649,6 +650,23 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             summary: "Generate text from session context",
             description:
               "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.nextSteps", "/api/session/:sessionID/next-steps", {
+        params: { sessionID: Session.ID },
+        payload: NextSteps.Request,
+        success: Schema.Struct({ data: NextSteps.Result }).annotate({ identifier: "SessionNextStepsResponse" }),
+        error: [SessionNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.nextSteps",
+            summary: "Suggest next steps",
+            description:
+              "Suggest messages the user could send after the latest successful reply. Returns an empty list when the reply is not eligible.",
           }),
         ),
     )

@@ -1,7 +1,7 @@
 import { For, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
-import type { SessionUserActions } from "../actions"
+import type { SessionNextStepsActions, SessionUserActions } from "../actions"
 import type { TimelineDetail } from "./detail"
 import { createReactiveTimelineProjection, TimelineRow, type ReasoningMode } from "./projection"
 import { createSessionTimelineRowRenderer, type SessionUserPresentation } from "./session-timeline-row"
@@ -12,6 +12,7 @@ export type SessionTimelineProps = {
   document: SessionDocument
   presentation?: Record<string, SessionUserPresentation | undefined>
   actions?: SessionUserActions
+  nextSteps?: SessionNextStepsActions
   reasoningMode?: ReasoningMode
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
@@ -39,6 +40,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     projection,
     presentation: (message) => props.presentation?.[message.id],
     actions: props.actions,
+    nextSteps: props.nextSteps,
     reasoningMode: () => props.reasoningMode ?? "compact",
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,

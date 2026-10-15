@@ -26,7 +26,12 @@ import { Icon } from "@opencode/ui/icon"
 import { Spring, frameLoop, prefersReducedMotion } from "@opencode/ui/motion"
 import { springStyle } from "@opencode/ui/motion/solid"
 import { Dynamic } from "solid-js/web"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionNextStepsActions,
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+} from "../actions"
 import { useData } from "../context"
 import { useSources } from "../context/sources"
 import { turnSources } from "../sources/sources"
@@ -97,6 +102,7 @@ export function createSessionTimelineRowRenderer(input: {
   projection: Projection
   presentation: (message: SessionMessageUser) => SessionUserPresentation | undefined
   actions?: SessionUserActions
+  nextSteps?: SessionNextStepsActions
   reasoningMode: Accessor<ReasoningMode>
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
@@ -583,6 +589,11 @@ export function createSessionTimelineRowRenderer(input: {
                 defaultOpen={defaultOpen()}
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
+                nextSteps={
+                  input.status().type === "idle" && input.projection.activeMessageID() === row().userMessageID
+                    ? input.nextSteps
+                    : undefined
+                }
                 onContentRendered={onSizeChange}
               />
             )}

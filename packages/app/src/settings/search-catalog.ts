@@ -133,6 +133,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "vertical side tabs projects recents organize sidebar",
   },
   {
+    tab: "general",
+    label: "settings.general.row.nextSteps.title",
+    target: "settings-next-steps",
+    section: "settings.general.section.general",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",

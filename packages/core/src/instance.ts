@@ -45,6 +45,7 @@ import { SessionRunnerLLM } from "./session/runner/llm.js"
 import { SessionRunnerModel } from "./session/runner/model.js"
 import { SessionCompaction } from "./session/compaction.js"
 import { SessionTitle } from "./session/title.js"
+import { SessionNextSteps } from "./session/next-steps.js"
 import { SessionContext } from "./session/context.js"
 import { SessionPromptPreview } from "./session/prompt-preview.js"
 import { Skill } from "./skill.js"
@@ -114,6 +115,7 @@ const nodes = [
   SessionRunnerModel.node,
   SessionCompaction.node,
   SessionTitle.node,
+  SessionNextSteps.node,
   SessionContext.node,
   SessionPromptPreview.node,
   Snapshot.node,

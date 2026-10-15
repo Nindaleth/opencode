@@ -71,6 +71,8 @@ import type {
   SessionInboxUpdateOutput,
   SessionGenerateInput,
   SessionGenerateOutput,
+  SessionNextStepsInput,
+  SessionNextStepsOutput,
   SessionInterruptInput,
   SessionInterruptOutput,
   SessionBackgroundInput,
@@ -674,6 +676,17 @@ const EndpointSessionGenerate = (raw: RawClient["server.session"]) => (input: Se
     ),
   )
 
+const EndpointSessionNextSteps = (raw: RawClient["server.session"]) => (input: SessionNextStepsInput) =>
+  preserveEffect<SessionNextStepsOutput>()(
+    raw["session.nextSteps"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { messageID: input["messageID"], idleID: input["idleID"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionInterrupt = (raw: RawClient["server.session"]) => (input: SessionInterruptInput) =>
   preserveEffect<SessionInterruptOutput>()(
     raw["session.interrupt"]({ params: { sessionID: input["sessionID"] }, query: { resume: input["resume"] } }).pipe(
@@ -788,6 +801,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
     update: EndpointSessionInboxUpdate(raw),
   },
   generate: EndpointSessionGenerate(raw),
+  nextSteps: EndpointSessionNextSteps(raw),
   interrupt: EndpointSessionInterrupt(raw),
   background: EndpointSessionBackground(raw),
   message: { get: EndpointSessionMessageGet(raw) },

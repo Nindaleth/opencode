@@ -1059,6 +1059,9 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
+  "settings.general.row.nextSteps.title": "Suggest next steps",
+  "settings.general.row.nextSteps.description":
+    "Generating next steps uses the configured model and may incur additional model usage.",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",
@@ -1216,6 +1219,10 @@ export const dict = {
 
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",
+  "session.nextSteps.replace.title": "Replace draft?",
+  "session.nextSteps.replace.description": "Your current draft will be replaced with this next step.",
+  "session.nextSteps.replace.keep": "Keep draft",
+  "session.nextSteps.replace.replace": "Replace draft",
   "session.delete.confirm": 'Delete session "{{name}}"?',
   "session.delete.button": "Delete session",
 

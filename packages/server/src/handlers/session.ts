@@ -598,6 +598,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.nextSteps",
+        Effect.fn(function* (ctx) {
+          const nextSteps = yield* session
+            .nextSteps({ sessionID: ctx.params.sessionID, ...ctx.payload })
+            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return { data: { ...ctx.payload, nextSteps } }
+        }),
+      )
+      .handle(
         "session.log",
         Effect.fn(function* (ctx) {
           yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))

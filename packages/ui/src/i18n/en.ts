@@ -294,6 +294,7 @@ const source = {
   "ui.message.copyResponse": "Copy response",
   "ui.message.copyOutput": "Copy output",
   "ui.message.copied": "Copied",
+  "ui.message.nextSteps.label": "Next steps - click to edit",
   "ui.message.thought": "Thought",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

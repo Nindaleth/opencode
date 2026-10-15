@@ -182,9 +182,16 @@ describe("Agent", () => {
         "compaction",
         "explore",
         "general",
+        "next-steps",
         "summary",
         "title",
       ])
+      const nextSteps = yield* agent.get(Agent.ID.make("next-steps"))
+      expect(nextSteps?.mode).toBe("primary")
+      expect(nextSteps?.hidden).toBe(true)
+      expect(nextSteps?.system?.trim()).toBeTruthy()
+      expect(nextSteps?.model).toBeUndefined()
+      expect(nextSteps?.permissions).toContainEqual({ action: "*", resource: "*", effect: "deny" })
       expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
       const permissions = (yield* agent.get(Agent.defaultID))?.permissions ?? []
       const compaction = yield* agent.get(Agent.ID.make("compaction"))

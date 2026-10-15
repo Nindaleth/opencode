@@ -101,6 +101,7 @@ describe("settings schema", () => {
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
+        nextSteps: true,
       },
       appearance: {
         fontSize: 14,
@@ -140,6 +141,7 @@ describe("settings schema", () => {
         timelineWidth: "invalid",
         newQuestionUI: "invalid",
         sidebarOrganize: "off",
+        nextSteps: "yes",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true, autoApproveProjects: { on: true, off: false, bad: "yes" } },
@@ -158,6 +160,7 @@ describe("settings schema", () => {
       timelineWidth: "comfortable",
       newQuestionUI: false,
       sidebarOrganize: "list",
+      nextSteps: true,
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,

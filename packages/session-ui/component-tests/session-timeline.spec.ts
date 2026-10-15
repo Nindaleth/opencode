@@ -155,3 +155,39 @@ story("keeps patch file disclosures independent", async ({ mount }) => {
   await expect(modified).toHaveAttribute("aria-expanded", "true")
   await expect(deleted).toHaveAttribute("aria-expanded", "false")
 })
+
+story("shows next steps only under the final reply text", async ({ mount }) => {
+  const timeline = await mount("current-session-timeline-rows--next-steps")
+  const blocks = timeline.locator('[data-slot="text-part-next-steps"]')
+  await expect(blocks).toHaveCount(1)
+  const final = timeline.locator('[data-component="text-part"]').last()
+  await expect(final.locator('[data-slot="text-part-next-steps"]')).toContainText("Next steps - click to edit")
+  await expect(final.locator('[data-slot="text-part-next-steps"] button')).toHaveCount(2)
+  await expect(timeline.locator('[data-component="markdown"] [data-slot="text-part-next-steps"]')).toHaveCount(0)
+})
+
+story("wraps long next steps at a narrow width", async ({ mount, page }) => {
+  await page.setViewportSize({ width: 360, height: 900 })
+  const timeline = await mount("current-session-timeline-rows--next-steps")
+  const block = timeline.locator('[data-slot="text-part-next-steps"]')
+  await expect(block.getByText("Next steps - click to edit")).toBeVisible()
+  const button = block.locator("button").last()
+  await expect(button).toBeVisible()
+  const overflow = await button.evaluate((element) => ({
+    x: element.scrollWidth - element.clientWidth,
+    y: element.scrollHeight - element.clientHeight,
+  }))
+  expect(overflow.x).toBeLessThanOrEqual(0)
+  expect(overflow.y).toBeLessThanOrEqual(0)
+})
+
+story("selects a next step by mouse and keyboard", async ({ mount }) => {
+  const root = await mount("current-session-timeline-rows--next-steps")
+  const buttons = root.locator('[data-slot="text-part-next-steps"] button')
+  const activity = root.locator("output")
+  await buttons.first().click()
+  await expect(activity).toContainText("msg_assistant_next_steps_final: Run the focused tests")
+  await buttons.last().focus()
+  await buttons.last().press("Enter")
+  await expect(activity).toContainText("msg_assistant_next_steps_final: Explain")
+})

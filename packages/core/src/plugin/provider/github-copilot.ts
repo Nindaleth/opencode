@@ -302,7 +302,7 @@ export const GithubCopilotPlugin = define({
           const session = yield* ctx.session
             .get({ sessionID: evt.sessionID })
             .pipe(Effect.orElseSucceed(() => undefined))
-          const interaction = interactionType(evt.kind, session?.parentID !== undefined)
+          const interaction = interactionType(evt.kind, evt.agent, session?.parentID !== undefined)
           evt.headers["X-Interaction-Type"] = interaction
           evt.headers["X-Interaction-Id"] = session ? SessionAffinity.get(session) : evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
@@ -573,9 +573,10 @@ function applyHeaders(headers: Headers, token: string | undefined, app: App.Info
 }
 
 // Mirrors the Copilot client's X-Interaction-Type vocabulary: the agent loop is the default,
-// nested sessions are subagents, and title/compaction are the two utility overrides.
-export function interactionType(kind: SessionRequestKind, child: boolean) {
+// nested sessions are subagents, and title/next-steps/compaction are the utility overrides.
+export function interactionType(kind: SessionRequestKind, agent: string, child: boolean) {
   if (kind === "title") return "conversation-background"
+  if (kind === "generate" && agent === "next-steps") return "conversation-background"
   if (kind === "compaction") return "conversation-compaction"
   if (child) return "conversation-subagent"
   return "conversation-agent"

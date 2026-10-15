@@ -67,6 +67,10 @@ export interface Interface {
       }
     | undefined
   >
+  /** Selects the next-steps agent and its model; an unusable explicit model selects nothing. */
+  readonly selectNextSteps: (
+    session: SessionSchema.Info,
+  ) => Effect.Effect<{ readonly agent: Agent.Info; readonly model: SessionRunnerModel.Resolved } | undefined>
   readonly request: SessionModelRequest.Interface
 }
 
@@ -134,6 +138,31 @@ const layer = Layer.effect(
       return { agent, primary, selected }
     })
 
+    const selectNextSteps = Effect.fn("SessionContext.selectNextSteps")(function* (session: SessionSchema.Info) {
+      const agent = yield* agents.get(Agent.ID.make("next-steps"))
+      if (!agent) return
+      const base =
+        agent.model ??
+        (yield* resolveModel(session, { kind: "generate", agent: agent.id }).pipe(
+          Effect.orElseSucceed(() => undefined),
+        ))?.ref
+      if (!base) return
+      const info = yield* model.get(base.providerID, base.id)
+      const variant =
+        agent.model?.variant ??
+        MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id)) ??
+        base.variant
+      const selected = yield* resolveModel(
+        {
+          ...session,
+          model: Model.Ref.make({ providerID: base.providerID, id: base.id, ...(variant ? { variant } : {}) }),
+        },
+        { kind: "generate", agent: agent.id },
+      ).pipe(Effect.orElseSucceed(() => undefined))
+      if (!selected) return
+      return { agent, model: selected }
+    })
+
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
@@ -198,7 +227,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, selectTransient, load, resolveModel, selectTitle, request })
+    return Service.of({ select, selectTransient, load, resolveModel, selectTitle, selectNextSteps, request })
   }),
 )
 
