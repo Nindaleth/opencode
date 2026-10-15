@@ -43,6 +43,7 @@ describe("acp permissions over the wire", () => {
           toolCalled(sessionID, "call_always", { path: "/workspace/file.ts" }),
           permissionAsked(sessionID, "perm_once", {
             action: "shell",
+            save: ["printf *"],
             metadata: { command: "printf hello" },
             source: { type: "tool", messageID: "msg_allow", id: "call_once" },
           }),
@@ -93,6 +94,20 @@ describe("acp permissions over the wire", () => {
       ["perm_selected_reject", "reject"],
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
+    ])
+  })
+
+  test("offers no Always allow when the request has nothing to save", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, permissionAsked(sessionID, "perm_no_save")),
+      permission: allowOnce,
+    })
+
+    expect(await acp.prompt(acp.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
+
+    expect(acp.permissions[0]?.options).toEqual([
+      { optionId: "once", kind: "allow_once", name: "Allow once" },
+      { optionId: "reject", kind: "reject_once", name: "Reject" },
     ])
   })
 
@@ -305,4 +320,3 @@ function question(sessionID: string, id: string) {
 function decisions(acp: Wire) {
   return acp.server.replies.map((reply) => [reply.requestID, reply.decision])
 }
-

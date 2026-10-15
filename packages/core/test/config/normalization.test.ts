@@ -308,7 +308,7 @@ describe("ConfigNormalize", () => {
       normalized({
         tools: { bash: true, write: false },
         permission: { read: "allow", custom: { first: "deny", second: "ask" }, task: "allow" },
-        permissions: [{ action: "native", resource: "*", effect: "deny" }],
+        permissions: [{ action: "native", resource: "*", effect: "ask", offer_always: false }],
       }).encoded.permissions,
     ).toEqual([
       { action: "shell", resource: "*", effect: "allow" },
@@ -317,7 +317,7 @@ describe("ConfigNormalize", () => {
       { action: "custom", resource: "first", effect: "deny" },
       { action: "custom", resource: "second", effect: "ask" },
       { action: "subagent", resource: "*", effect: "allow" },
-      { action: "native", resource: "*", effect: "deny" },
+      { action: "native", resource: "*", effect: "ask", offer_always: false },
     ])
   })
 

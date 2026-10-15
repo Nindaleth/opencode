@@ -155,6 +155,45 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("withholds Always allow when the matching ask rule disables it", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shield_oam_command", resource: "*", effect: "ask", offer_always: false },
+        { action: "shield_oam_command", resource: "*.*.get", effect: "allow" },
+      ])
+      const saved = yield* PermissionSaved.Service
+      const { service, fiber, request } = yield* waitForRequest({
+        action: "shield_oam_command",
+        resources: ["monitor.processes.restart"],
+        save: ["monitor.processes.restart"],
+      })
+      expect(request.save).toBeUndefined()
+      yield* service.reply({ requestID: request.id, reply: "always" })
+      yield* Fiber.join(fiber)
+      expect(yield* saved.list()).toEqual([])
+      expect(
+        yield* service.ask(assertion({ action: "shield_oam_command", resources: ["sysinfo.hostname.get"] })),
+      ).toMatchObject({ effect: "allow" })
+    }),
+  )
+
+  it.effect("ignores saved approvals when the matching ask rule disables Always allow", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shield_oam_command", resource: "*", effect: "ask" }])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({
+        projectID: Project.ID.global,
+        action: "shield_oam_command",
+        resources: ["monitor.processes.restart"],
+      })
+      const service = yield* Permission.Service
+      const restart = assertion({ action: "shield_oam_command", resources: ["monitor.processes.restart"] })
+      expect(yield* service.ask(restart)).toMatchObject({ effect: "allow" })
+      yield* setRules([{ action: "shield_oam_command", resource: "*", effect: "ask", offer_always: false }])
+      expect(yield* service.ask(restart)).toMatchObject({ effect: "ask" })
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

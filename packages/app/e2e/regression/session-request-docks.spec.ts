@@ -257,7 +257,7 @@ test("shows a pending permission dock", async ({ page }) => {
           permission: "shell",
           patterns: ["git status", "git diff"],
           metadata: {},
-          always: [],
+          always: ["git status *", "git diff *"],
         },
       ],
     },
@@ -294,7 +294,7 @@ test("sends one permission reply and closes the dock when it lands, before permi
           permission: "shell",
           patterns: ["git status"],
           metadata: {},
-          always: [],
+          always: ["git status"],
         },
       ],
     },
@@ -549,6 +549,30 @@ test("loads a running subagent's question without polling idle subagents on ever
   )
   await expect(page.getByRole("heading", { name: "Renamed request docks", exact: true })).toBeVisible()
   expect(forms.toSorted()).toEqual([`/api/session/${runningID}/form`, `/api/session/${sessionID}/form`].toSorted())
+})
+
+test("offers no Allow always when the permission has nothing to save", async ({ page }) => {
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "shield_oam_command",
+          patterns: ["monitor.processes.restart"],
+          metadata: {},
+          always: [],
+        },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  await expect(permission.getByText("monitor.processes.restart")).toBeVisible()
+  await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveText(["Deny", "Allow once"])
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {

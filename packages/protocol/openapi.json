@@ -21319,6 +21319,9 @@
           },
           "effect": {
             "$ref": "#/components/schemas/Permission.Effect"
+          },
+          "offer_always": {
+            "type": "boolean"
           }
         },
         "required": ["action", "resource", "effect"],

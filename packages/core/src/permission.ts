@@ -157,13 +157,11 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer(() => close)
 
     const savedRules = Effect.fnUntraced(function* () {
-      return (yield* saved.list({ projectID: location.project.id })).map(
-        (item): Permission.Rule => ({
-          action: item.action,
-          resource: item.resource,
-          effect: "allow",
-        }),
-      )
+      return (yield* saved.list({ projectID: location.project.id })).map((item): Permission.Rule => ({
+        action: item.action,
+        resource: item.resource,
+        effect: "allow",
+      }))
     })
 
     const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
@@ -184,7 +182,12 @@ const layer = Layer.effect(
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
-      const all = [...rules, ...(yield* savedRules())]
+      const locked = input.resources.some((resource) => {
+        const rule = evaluate(input.action, resource, rules)
+        return rule.effect === "ask" && rule.offer_always === false
+      })
+      // Ask rules with offer_always: false must prompt every time, so saved approvals cannot skip them.
+      const all = locked ? rules : [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
@@ -198,7 +201,7 @@ const layer = Layer.effect(
       })
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
-        return { effect: event.effect, message: event.message, rules: all }
+        return { effect: event.effect, message: event.message, rules: all, save: locked ? undefined : input.save }
       const settled = [...all, ...unattended]
       const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
       if (allowed) return { effect: "allow" as const, rules: all }
@@ -209,20 +212,20 @@ const layer = Layer.effect(
       }
     })
 
-    function request(input: AssertInput, message?: string): Request {
+    function request(input: AssertInput, result: { message?: string; save?: ReadonlyArray<string> }): Request {
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
+        save: result.save,
         // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
         // fail the HttpApi response encoder when clients list pending requests.
         metadata:
           input.metadata &&
           Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
         source: input.source,
-        message,
+        message: result.message,
       }
     }
 
@@ -248,7 +251,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
-      const value = request(input, result.message)
+      const value = request(input, result)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
@@ -268,7 +271,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result), input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
