@@ -341,6 +341,7 @@ const source = {
   "ui.permission.deny": "Deny",
   "ui.permission.allowAlways": "Allow always",
   "ui.permission.allowOnce": "Allow once",
+  "ui.permission.decoded": "{{key}} (decoded)",
 
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",

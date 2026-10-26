@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect"
-import { For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
@@ -33,6 +33,8 @@ export function SessionPermissionDock(props: {
       onSome: (value) =>
         Object.entries(value).map(([key, item]) => `${key}: ${isString(item) ? item : JSON.stringify(item)}`),
     })
+
+  const decodedInputs = createMemo(() => decodeBase64Fields(props.request.metadata?.input, ""))
 
   return (
     <DockPrompt
@@ -69,7 +71,7 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
-      <div data-slot="permission-row">
+      <div data-slot="permission-row" class="select-text">
         <span data-slot="permission-spacer" aria-hidden="true" />
         <Show when={toolDescription()} fallback={<code data-slot="permission-action">{props.request.action}</code>}>
           <div data-slot="permission-hint">{toolDescription()}</div>
@@ -78,7 +80,7 @@ export function SessionPermissionDock(props: {
 
       <Show when={props.request.message}>
         {(message) => (
-          <div data-slot="permission-row">
+          <div data-slot="permission-row" class="select-text">
             <span data-slot="permission-spacer" aria-hidden="true" />
             <div data-slot="permission-hint">{message()}</div>
           </div>
@@ -86,7 +88,7 @@ export function SessionPermissionDock(props: {
       </Show>
 
       <Show when={input().length > 0}>
-        <div data-slot="permission-row">
+        <div data-slot="permission-row" class="select-text">
           <span data-slot="permission-spacer" aria-hidden="true" />
           {/* Scrolls rather than truncates: the user approves these arguments, so all of them must be reachable */}
           <div data-slot="permission-input" data-scrollable>
@@ -96,7 +98,7 @@ export function SessionPermissionDock(props: {
       </Show>
 
       <Show when={props.request.resources.length > 0}>
-        <div data-slot="permission-row">
+        <div data-slot="permission-row" class="select-text">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-patterns">
             <For each={props.request.resources}>
@@ -105,6 +107,45 @@ export function SessionPermissionDock(props: {
           </div>
         </div>
       </Show>
+
+      <For each={decodedInputs()}>
+        {(field) => (
+          <div data-slot="permission-row" class="select-text">
+            <span data-slot="permission-spacer" aria-hidden="true" />
+            <div class="min-w-0 flex flex-col gap-1 mb-2">
+              <div class="text-12-medium text-text-weak">{language.t("ui.permission.decoded", { key: field.key })}</div>
+              <pre
+                data-slot="permission-decoded"
+                class="text-12-regular text-text-base min-w-0 max-h-52 overflow-auto whitespace-pre-wrap break-all border-s-2 border-v2-border-border-strong ps-3"
+              >
+                {field.preview}
+              </pre>
+            </div>
+          </div>
+        )}
+      </For>
     </DockPrompt>
   )
+}
+
+function decodeBase64Fields(value: unknown, key: string): { key: string; preview: string }[] {
+  if (Array.isArray(value)) return value.flatMap((item) => decodeBase64Fields(item, key))
+  if (value !== null && typeof value === "object")
+    return Object.entries(value).flatMap(([name, item]) => decodeBase64Fields(item, name))
+  if (typeof value !== "string" || !/base64/i.test(key)) return []
+  const text = decodeUtf8Base64(value)
+  if (!text) return []
+  return [{ key, preview: text.replace(/\r?\n$/, "").replace(/\r\n/g, "\n") }]
+}
+
+function decodeUtf8Base64(value: string) {
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(
+      Uint8Array.from(atob(value), (char) => char.charCodeAt(0)),
+    )
+    if (text.includes("\0")) return
+    return text
+  } catch {
+    return
+  }
 }
