@@ -575,6 +575,41 @@ test("offers no Allow always when the permission has nothing to save", async ({ 
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveText(["Deny", "Allow once"])
 })
 
+test("previews decoded base64 permission input as selectable text", async ({ page }) => {
+  const lines = Array.from({ length: 40 }, (_, index) => `config line ${index + 1}`)
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "write",
+          patterns: ["deploy"],
+          metadata: {
+            input: {
+              target: "staging",
+              files: [{ path: "app.conf", content_base64: Buffer.from(`${lines.join("\n")}\n`).toString("base64") }],
+            },
+          },
+          always: [],
+        },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const preview = permission.locator('[data-slot="permission-decoded"]')
+  await expect(permission.getByText("content_base64 (decoded)", { exact: true })).toBeVisible()
+  await expect(preview).toHaveJSProperty("textContent", lines.join("\n"))
+  await expect.poll(() => preview.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+
+  await preview.click({ clickCount: 3 })
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? "")).toContain("config line")
+})
+
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
   const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
   await mockServer(page, { forms: [] })
