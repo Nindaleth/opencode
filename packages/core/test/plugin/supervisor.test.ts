@@ -144,6 +144,25 @@ describe("PluginSupervisor", () => {
     }),
   )
 
+  it.live("activates the notify-http builtin without npm resolution", () =>
+    Effect.gen(function* () {
+      source.operations = [{ type: "add", target: "notify-http", options: { url: "http://127.0.0.1:9" } }]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({ id: "notify-http", source: { type: "builtin" }, state: { status: "active" } }),
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      source.operations = []
+    }),
+  )
+
   it.live("activates prompt overrides as a builtin and reports invalid sources", () =>
     Effect.gen(function* () {
       source.operations = [{ type: "add", target: "prompt-overrides", options: { model: { text: "replacement" } } }]
