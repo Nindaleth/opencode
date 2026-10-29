@@ -17,15 +17,20 @@ test("index.html references local resources by relative path and has no web mani
   expect(content).not.toContain('rel="manifest"')
 })
 
-// Telemetry must not delay first paint: nothing awaits before render, and the Sentry SDK loads lazily.
-test("the renderer entry renders while optional telemetry is still loading", async () => {
+// Nothing awaits before render, so startup work cannot delay first paint.
+test("the renderer entry renders before awaiting anything", async () => {
   const entry = await Bun.file(join(import.meta.dirname, "index.tsx")).text()
   const render = entry.indexOf("render(")
   expect(render).toBeGreaterThan(-1)
   expect(entry.slice(0, render)).not.toMatch(/\bawait\b/)
+})
 
-  for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: import.meta.dirname })) {
-    if (file.includes(".test.")) continue
-    expect(await Bun.file(join(import.meta.dirname, file)).text()).not.toMatch(/\bfrom\s+["']@sentry\//)
+// Release builds bake in a Sentry DSN, so any SDK import would report errors to Sentry.
+test("neither the desktop renderer nor the app it bundles loads Sentry", async () => {
+  for (const dir of [import.meta.dirname, join(import.meta.dirname, "../../../app/src")]) {
+    for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: dir })) {
+      if (file.includes(".test.")) continue
+      expect(`${file}: ${await Bun.file(join(dir, file)).text()}`).not.toMatch(/["']@sentry\//)
+    }
   }
 })
