@@ -89,3 +89,30 @@ for (const flag of [undefined, "0", "1", "true"]) {
       ),
     )
 }
+
+for (const providerID of [Provider.ID.opencode, Provider.ID.make("opencode-go")])
+  it.effect(`unconfigured default skips free ${providerID} models`, () =>
+    withEnv({ OPENCODE_DISABLE_FREE_MODELS: undefined }, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const resolver = yield* ModelResolver.Service
+        yield* providers.transform((editor) => {
+          editor.update(providerID, () => {})
+          editor.models.update(providerID, free, (model) => {
+            model.time.released = 3000
+            model.package = "@opencode/ai/providers/openai"
+          })
+          editor.update(other, () => {})
+          editor.models.update(other, local, (model) => {
+            model.time.released = 1000
+            model.package = "@opencode/ai/providers/openai"
+          })
+        })
+        expect((yield* models.default())?.id).toBe(local)
+
+        yield* providers.transform((editor) => editor.remove(other))
+        expect(yield* resolver.resolve()).toBeUndefined()
+      }).pipe(Effect.provide(layer)),
+    ),
+  )

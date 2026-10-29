@@ -559,7 +559,7 @@ describe("Provider and Model", () => {
     }),
   )
 
-  it.effect("defaults to big-pickle when only free OpenCode models are available", () =>
+  it.effect("lists big-pickle first but has no default when only free OpenCode models are available", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
       const models = yield* Model.Service
@@ -579,7 +579,7 @@ describe("Provider and Model", () => {
         Model.ID.make("muse-spark-1.3-contributor-free"),
         Model.ID.make("new-free"),
       ])
-      expect((yield* models.default())?.id).toBe(Model.ID.make("big-pickle"))
+      expect(yield* models.default()).toBeUndefined()
     }),
   )
 
