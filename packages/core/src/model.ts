@@ -301,7 +301,7 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available.find(supportsText)
+        return model?.enabled ? model : value.available.find((model) => supportsText(model) && !isFree(model))
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
@@ -322,8 +322,8 @@ const layer = Layer.effect(
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
 
-// Signed out, only free OpenCode models are enabled. Clients default to the first available model, so keep
-// these free models ahead of each new free launch instead of letting release order pick the default.
+// Signed out, only free OpenCode models are enabled. Keep these free models ahead of each new free launch
+// in model lists instead of letting release order pick the first entry.
 const PREFERRED_FREE = [
   "big-pickle",
   "deepseek-v4.1-flash-free",
@@ -338,6 +338,13 @@ function preferFree(models: Info[]) {
   if (!freeOnly) return models
   const picks = PREFERRED_FREE.flatMap((id) => models.find((model) => model.id === id) ?? [])
   return [...picks, ...models.filter((model) => !picks.includes(model))]
+}
+
+export function isFree(model: Pick<Info, "providerID" | "cost">) {
+  return (
+    (model.providerID === Provider.ID.opencode || model.providerID === Provider.ID.make("opencode-go")) &&
+    !model.cost.some((cost) => cost.input > 0)
+  )
 }
 
 export function supportsText(model: Pick<Info, "capabilities">) {

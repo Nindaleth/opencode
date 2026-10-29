@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { latestModels, uniqueModels } from "./models"
+import { fallbackModel, latestModels, uniqueModels } from "./models"
 
 const model = (provider: string, id: string, release_date: string, family?: string) => ({
   id,
@@ -52,4 +52,14 @@ test("uniqueModels keeps the first of each model in order", () => {
     { providerID: "b", modelID: "1" },
     { providerID: "a", modelID: "2" },
   ])
+})
+
+test("fallbackModel never picks a free OpenCode model on its own", () => {
+  const free = { cost: { input: 0 } }
+  const opencode = { id: "opencode", models: { "big-pickle": { id: "big-pickle", ...free } } }
+  const go = { id: "opencode-go", models: { "glm-free": { id: "glm-free", ...free } } }
+  const local = { id: "local", models: { llama: { id: "llama", ...free } } }
+
+  expect(fallbackModel([opencode, go, local])).toEqual({ providerID: "local", modelID: "llama" })
+  expect(fallbackModel([opencode, go])).toBeUndefined()
 })

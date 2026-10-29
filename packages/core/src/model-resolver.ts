@@ -523,7 +523,7 @@ export const layer = Layer.effect(
     const fallback = Effect.fn("ModelResolver.fallback")(function* () {
       const model = yield* models.default()
       if (model && hasPackage(model)) return model
-      return (yield* models.available()).find((model) => hasPackage(model) && Model.supportsText(model))
+      return (yield* models.available()).find((model) => hasPackage(model) && Model.supportsText(model) && !Model.isFree(model))
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {

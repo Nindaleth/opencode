@@ -3,7 +3,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, untrack } from "solid-js"
 import { Predicate, Schema, SchemaGetter } from "effect"
-import { useModels } from "@/providers/models/models"
+import { fallbackModel, useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
 import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -391,14 +391,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const defaultModel = () => {
-      for (const provider of providers.connected()) {
-        const first = Object.values(provider.models)[0]
+      const model = fallbackModel(providers.connected())
 
-        if (!first) continue
-        const model = { providerID: provider.id, modelID: first.id }
-
-        if (validModel(model)) return model
-      }
+      if (model && validModel(model)) return model
     }
 
     const fallback = createMemo(() => firstModel(configuredModel, recentModel, defaultModel))

@@ -201,7 +201,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const model = models()?.[0]
+        // Free OpenCode models are used only when picked, so prompts never reach them by default.
+        const model = models()?.find(
+          (model) =>
+            !(["opencode", "opencode-go"].includes(model.providerID) && !model.cost.some((cost) => cost.input > 0)),
+        )
         if (!model) return undefined
         return {
           providerID: model.providerID,

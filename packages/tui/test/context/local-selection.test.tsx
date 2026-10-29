@@ -109,6 +109,17 @@ test("new-session fallback still skips unavailable CLI and recent models", async
   expect(setup.local.model.available()).toBe(true)
 })
 
+test("new-session fallback never picks a free OpenCode model on its own", async () => {
+  const free = (providerID: string, id: string) => ({ ...model(id), providerID })
+  for (const [models, expected] of [
+    [[free("opencode", "big-pickle"), free("opencode-go", "glm-free"), model("paid")], "paid"],
+    [[free("opencode", "big-pickle")], undefined],
+  ] as const) {
+    await using setup = await renderLocal({ models: [...models] })
+    expect(setup.local.model.current()?.modelID).toBe(expected)
+  }
+})
+
 test("a manual agent switch supersedes the CLI agent after its commit", async () => {
   await using setup = await renderLocal({
     args: { agent: "build" },

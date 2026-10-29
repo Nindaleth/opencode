@@ -19,6 +19,19 @@ function modelKey(model: ModelKey) {
 export const isFreeModel = (model: { provider: { id: string }; cost?: { input: number } }) =>
   model.provider.id === "opencode" && (!model.cost || model.cost.input === 0)
 
+// Free OpenCode models are used only when picked, so prompts never reach them by default.
+export function fallbackModel(
+  providers: Array<{ id: string; models: Record<string, { id: string; cost?: { input: number } }> }>,
+) {
+  for (const provider of providers) {
+    const first = Object.values(provider.models).find(
+      (model) => !(["opencode", "opencode-go"].includes(provider.id) && (!model.cost || model.cost.input === 0)),
+    )
+
+    if (first) return { providerID: provider.id, modelID: first.id }
+  }
+}
+
 // The newest release of each family per provider. A free model shares its family and release date with its paid twin,
 // so the two are grouped apart. A tie keeps the first model listed.
 export function latestModels<T extends { id: string; provider: { id: string }; family?: string; release_date: string }>(
