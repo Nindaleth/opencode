@@ -139,6 +139,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.general",
   },
   {
+    tab: "general",
+    label: "settings.general.row.linkFavicons.title",
+    target: "settings-link-favicons",
+    section: "settings.general.section.general",
+    keywords: "favicon icon link google privacy",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",

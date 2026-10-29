@@ -1062,6 +1062,9 @@ export const dict = {
   "settings.general.row.nextSteps.title": "Suggest next steps",
   "settings.general.row.nextSteps.description":
     "Generating next steps uses the configured model and may incur additional model usage.",
+  "settings.general.row.linkFavicons.title": "Show link favicons",
+  "settings.general.row.linkFavicons.description":
+    "Show site icons next to links in messages. Icons are loaded from Google, which sees the hostname of every link.",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",

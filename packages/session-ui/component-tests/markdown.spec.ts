@@ -353,6 +353,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
         "[GitHub](https://github.com/anomalyco/opencode)",
       ].join(" · "),
       cached: true,
+      linkFavicons: true,
     })
   }, fixture)
 
@@ -399,6 +400,33 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
+story("does not send link hosts to Google unless link favicons are enabled", async ({ page }) => {
+  const requested: string[] = []
+  await page.route("https://www.google.com/s2/favicons?**", (route) => {
+    requested.push(route.request().url())
+
+    return route.fulfill({ status: 200, contentType: "image/png", body: png })
+  })
+
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: "[docs](https://developer.mozilla.org/docs) · [GitHub](https://github.com/anomalyco/opencode)",
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const docs = markdown.getByRole("link", { name: "docs" })
+  await expect(docs.locator(".markdown-link-favicon")).toHaveCount(1)
+  await expect(docs.locator(".markdown-link-favicon img")).toHaveCount(0)
+  await expect(
+    markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]"),
+  ).toHaveCount(1)
+  expect(requested).toEqual([])
+})
+
 story("keeps link icons on the same line as the start of their label", async ({ page }) => {
   await page.route("https://www.google.com/s2/favicons?**", (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: png }),
@@ -412,6 +440,7 @@ story("keeps link icons on the same line as the start of their label", async ({ 
         "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/white-space/long-path",
       ].join(" "),
       cached: true,
+      linkFavicons: true,
     })
   }, fixture)
   const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
@@ -456,6 +485,7 @@ story("selects the whole paragraph on triple click across link icons", async ({ 
     await mountMarkdown({
       text: "The release is running ([run 41750815701](https://github.com/anomalyco/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
       cached: true,
+      linkFavicons: true,
     })
   }, fixture)
   const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
@@ -947,6 +977,10 @@ story("preserves streamed math through completion and a fresh render", async ({ 
 for (const theme of ["light", "dark"]) {
   story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
     await page.setViewportSize({ width: 390, height: 900 })
+    // Chromium can exhaust loader resources when the warm Vite graph loads twice in one page.
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send("Network.clearBrowserCache")
+    await cdp.detach()
     await mount("components-markdown--complete-response", { globals: { theme } })
     await expect(page.locator("html")).toHaveClass(new RegExp(theme))
     await page.evaluate(async (fixture) => {

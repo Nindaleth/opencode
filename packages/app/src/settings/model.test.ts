@@ -102,6 +102,7 @@ describe("settings schema", () => {
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
         nextSteps: true,
+        linkFavicons: false,
       },
       appearance: {
         fontSize: 14,

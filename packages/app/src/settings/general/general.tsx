@@ -287,6 +287,18 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
 
+        <SettingsRow
+          title={language.t("settings.general.row.linkFavicons.title")}
+          description={language.t("settings.general.row.linkFavicons.description")}
+        >
+          <div data-action="settings-link-favicons">
+            <Switch
+              checked={settings.general.linkFavicons()}
+              onChange={(checked) => settings.general.setLinkFavicons(checked)}
+            />
+          </div>
+        </SettingsRow>
+
         <Show when={desktop()}>
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}

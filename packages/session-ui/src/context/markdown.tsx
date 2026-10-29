@@ -61,6 +61,7 @@ const context = createContext<{
   readonly openSession?: (sessionID: string) => void
   readonly sessionTitle?: (sessionID: string) => string | undefined
   readonly codeBlocks?: MarkdownCodeBlocks
+  readonly linkFavicons?: boolean
 }>()
 
 export function MarkdownProvider(
@@ -72,6 +73,8 @@ export function MarkdownProvider(
     sessionTitle?: (id: string) => string | undefined
     /** Content for code blocks; inherited when omitted. `false` turns it off below, e.g. inside such content. */
     codeBlocks?: MarkdownCodeBlocks | false
+    /** Show favicons of external links. Their hostnames are sent to Google's favicon service. */
+    linkFavicons?: boolean
   }>,
 ) {
   const parent = useMarkdown()
@@ -98,6 +101,9 @@ export function MarkdownProvider(
           if (props.codeBlocks === false) return undefined
 
           return props.codeBlocks ?? parent?.codeBlocks
+        },
+        get linkFavicons() {
+          return props.linkFavicons ?? parent?.linkFavicons
         },
       }}
     >

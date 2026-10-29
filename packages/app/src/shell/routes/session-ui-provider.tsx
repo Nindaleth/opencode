@@ -235,7 +235,12 @@ export function SessionUIProvider(
         }
         backgroundCompaction={backgroundCompaction()}
       >
-        <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
+        <MarkdownProvider
+          readImage={readImage()}
+          openSession={openReferencedSession}
+          sessionTitle={sessionTitle}
+          linkFavicons={settings.general.linkFavicons()}
+        >
           <SessionExportProvider>{props.children}</SessionExportProvider>
         </MarkdownProvider>
       </DataProvider>

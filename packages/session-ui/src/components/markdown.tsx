@@ -468,7 +468,7 @@ const publicFaviconHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,6
 
 const privateFaviconSuffix = /\.(?:alt|example|internal|invalid|local|localhost|onion|test|ts\.net)$/
 
-function markExternalLinkFavicons(root: HTMLDivElement) {
+function markExternalLinkFavicons(root: HTMLDivElement, fetchFavicons: boolean) {
   root.querySelectorAll<HTMLAnchorElement>("a.external-link[href]").forEach((link) => {
     if (!link.textContent?.trim() || link.querySelector("img")) return
 
@@ -484,6 +484,7 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
 
     if (host === "github.com") favicon.dataset.github = ""
     else if (
+      fetchFavicons &&
       publicFaviconHost.test(host) &&
       !privateFaviconSuffix.test(host) &&
       host !== "home.arpa" &&
@@ -1044,6 +1045,7 @@ export function Markdown(
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
     const sessionLinks = markdown?.sessionTitle
     const localFileExists = markdown?.localFileExists
+    const linkFavicons = markdown?.linkFavicons ?? false
 
     renderedEvent.reused = content.length === renderedBlocks.length
 
@@ -1055,7 +1057,17 @@ export function Markdown(
 
       const check = kept
         ? inlineCodeChecks.get(current)?.pending
-        : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
+        : updateBlock(
+            container,
+            index,
+            block,
+            labels,
+            plugins,
+            sessionLinks,
+            lifetime.signal,
+            linkFavicons,
+            localFileExists,
+          )
 
       return check ? [check] : []
     })
@@ -1203,6 +1215,7 @@ function updateBlock(
   plugins: CodePlugins | undefined,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
+  linkFavicons: boolean,
   localFileExists?: MarkdownLocalFileExists,
 ) {
   const current = container.children[index]
@@ -1246,7 +1259,7 @@ function updateBlock(
   wrapTables(source)
 
   if (sessionLinks) markSessionLinks(source, sessionLinks)
-  markExternalLinkFavicons(source)
+  markExternalLinkFavicons(source, linkFavicons)
 
   if (rendered) {
     rendered.renderer.update(source, block.mode === "live", rendered.raw !== block.raw)
