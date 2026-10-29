@@ -58,14 +58,15 @@ export function configured(options: Record<string, unknown>): Plugin {
           Effect.sync(() => {
             if (event.first) return
             const match = findLimits(limits, `${event.rootModel.providerID}/${event.rootModel.id}`)
+            const since = event.rootUserMessageID ? "the last user message" : "session start"
             if (match.parent !== undefined && event.cost.root >= match.parent) {
               event.continue = false
-              event.reason = `Stopped: this prompt has spent $${event.cost.root.toFixed(2)} in this session, reaching the $${match.parent.toFixed(2)} limit. Send a new message to continue.`
+              event.reason = `Stopped: this session has spent $${event.cost.root.toFixed(2)} since ${since}, reaching the $${match.parent.toFixed(2)} limit. Send a new message to continue.`
               return
             }
             if (match.subagents !== undefined && event.cost.descendants >= match.subagents) {
               event.continue = false
-              event.reason = `Stopped: this prompt has spent $${event.cost.descendants.toFixed(2)} on subagents, reaching the $${match.subagents.toFixed(2)} limit. Send a new message to continue.`
+              event.reason = `Stopped: subagents have spent $${event.cost.descendants.toFixed(2)} since ${since}, reaching the $${match.subagents.toFixed(2)} limit. Send a new message to continue.`
             }
           }),
         )
