@@ -140,6 +140,7 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
   nextSteps: Schema.Boolean,
+  linkFavicons: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -312,6 +313,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
     nextSteps: true,
+    linkFavicons: false,
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
@@ -460,6 +462,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         nextSteps: withFallback(() => store.general?.nextSteps, defaultSettings.general.nextSteps),
         setNextSteps(value: boolean) {
           setStore("general", "nextSteps", value)
+        },
+        linkFavicons: withFallback(() => store.general?.linkFavicons, defaultSettings.general.linkFavicons),
+        setLinkFavicons(value: boolean) {
+          setStore("general", "linkFavicons", value)
         },
       },
       visibility: {

@@ -32,6 +32,7 @@ export async function mountMarkdown(options: {
   images?: boolean
   synchronousFiles?: boolean
   localFileExists?: MarkdownLocalFileExists
+  linkFavicons?: boolean
 }) {
   if (options.cached) await preloadMarkdown(options.text, "markdown-test")
   const host = document.createElement("div")
@@ -81,6 +82,7 @@ export async function mountMarkdown(options: {
               options.localFileExists?.(path) ??
               (options.synchronousFiles ? existingFiles.has(path) : Promise.resolve(existingFiles.has(path)))
             }
+            linkFavicons={options.linkFavicons}
           >
             <Show when={visible()}>
               <Markdown

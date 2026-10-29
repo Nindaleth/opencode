@@ -272,6 +272,7 @@ export function SessionUIProvider(
           openSession={openReferencedSession}
           sessionTitle={sessionTitle}
           sessionMenu={(target) => setReferenceMenu({ ...target })}
+          linkFavicons={settings.general.linkFavicons()}
         >
           <SessionExportProvider>{props.children}</SessionExportProvider>
           <SessionReferenceMenu

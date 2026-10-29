@@ -82,6 +82,7 @@ export function createTimelineCache(
         const openSession = select(() => markdown?.openSession)
         const sessionTitle = select(() => markdown?.sessionTitle)
         const sessionMenu = select(() => markdown?.sessionMenu)
+        const linkFavicons = select(() => markdown?.linkFavicons)
         const turnDiff = select(() => data.turnDiff)
 
         const view = () =>
@@ -149,6 +150,9 @@ export function createTimelineCache(
                     },
                     get sessionMenu() {
                       return sessionMenu()
+                    },
+                    get linkFavicons() {
+                      return linkFavicons()
                     },
                   },
                   view,
