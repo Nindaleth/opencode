@@ -21,7 +21,7 @@ export interface Snapshot {
   readonly step: number
   readonly model: Model.Ref
   readonly rootModel: Model.Ref
-  readonly rootUserMessageID: SessionMessage.ID
+  readonly rootUserMessageID?: SessionMessage.ID
   readonly cost: { readonly session: number; readonly root: number; readonly descendants: number }
   readonly first: boolean
 }
@@ -67,20 +67,22 @@ export const snapshot = Effect.fn("SessionCost.snapshot")(function* (input: {
     .limit(1)
     .get()
     .pipe(Effect.orDie)
-  if (!prompt) return undefined
-  const delivered = yield* db
-    .select({ created: EventTable.created })
-    .from(EventTable)
-    .where(
-      and(
-        eq(EventTable.aggregate_id, root.id),
-        eq(EventTable.seq, prompt.seq),
-        eq(EventTable.type, type(SessionEvent.InboxDelivered)),
-        sql`json_extract(${EventTable.data}, '$.inboxID') = ${prompt.id}`,
-      ),
-    )
-    .get()
-    .pipe(Effect.orDie)
+  const seq = prompt?.seq ?? 0
+  const delivered = prompt
+    ? yield* db
+        .select({ created: EventTable.created })
+        .from(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, root.id),
+            eq(EventTable.seq, prompt.seq),
+            eq(EventTable.type, type(SessionEvent.InboxDelivered)),
+            sql`json_extract(${EventTable.data}, '$.inboxID') = ${prompt.id}`,
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+    : { created: root.time_created }
   if (!delivered) return undefined
 
   const selected = yield* db
@@ -90,7 +92,7 @@ export const snapshot = Effect.fn("SessionCost.snapshot")(function* (input: {
       and(
         eq(EventTable.aggregate_id, root.id),
         eq(EventTable.type, type(SessionEvent.ModelSelected)),
-        sql`${EventTable.seq} <= ${prompt.seq}`,
+        sql`${EventTable.seq} <= ${seq}`,
       ),
     )
     .orderBy(desc(EventTable.seq))
@@ -104,7 +106,7 @@ export const snapshot = Effect.fn("SessionCost.snapshot")(function* (input: {
       and(
         eq(EventTable.aggregate_id, root.id),
         eq(EventTable.type, type(SessionEvent.Step.Started)),
-        gt(EventTable.seq, prompt.seq),
+        gt(EventTable.seq, seq),
       ),
     )
     .orderBy(EventTable.seq)
@@ -144,7 +146,7 @@ export const snapshot = Effect.fn("SessionCost.snapshot")(function* (input: {
       and(
         inArray(EventTable.type, usageTypes),
         or(
-          and(eq(EventTable.aggregate_id, root.id), gt(EventTable.seq, prompt.seq)),
+          and(eq(EventTable.aggregate_id, root.id), gt(EventTable.seq, seq)),
           descendants.length
             ? and(inArray(EventTable.aggregate_id, descendants), gte(EventTable.created, delivered.created))
             : undefined,
@@ -163,7 +165,7 @@ export const snapshot = Effect.fn("SessionCost.snapshot")(function* (input: {
     step: input.step,
     model: input.model,
     rootModel,
-    rootUserMessageID: prompt.id,
+    ...(prompt ? { rootUserMessageID: prompt.id } : {}),
     cost: {
       session: amounts.get(input.sessionID) ?? 0,
       root: amounts.get(root.id) ?? 0,

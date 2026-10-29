@@ -204,7 +204,7 @@ export interface SessionStepBefore {
   readonly step: number
   readonly model: Model.Ref
   readonly rootModel: Model.Ref
-  readonly rootUserMessageID: SessionMessage.ID
+  readonly rootUserMessageID?: SessionMessage.ID
   readonly cost: { readonly session: number; readonly root: number; readonly descendants: number }
   readonly first: boolean
   continue: boolean

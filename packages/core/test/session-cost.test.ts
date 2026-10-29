@@ -140,10 +140,45 @@ describe("per-prompt settled cost", () => {
     }),
   )
 
-  it.effect("skips a missing root prompt or session", () =>
+  it.effect("budgets synthetic-only sessions from creation until a real user message is delivered", () =>
     Effect.gen(function* () {
       const s = yield* setup
-      expect(yield* s.snapshot(root)).toBeUndefined()
+      expect(yield* s.snapshot(root)).toMatchObject({
+        rootModel: secondModel,
+        first: true,
+        cost: { session: 0, root: 0, descendants: 0 },
+      })
+      yield* s.bus.publish(SessionEvent.ModelSelected, { sessionID: root, model: firstModel })
+      yield* s.step(root, 1.25)
+      yield* s.step(child, 2)
+      yield* s.spend(grandchild, 0.5)
+      const syntheticID = SessionMessage.ID.make("msg_cost_synthetic_only")
+      yield* s.inbox.admit({
+        id: syntheticID,
+        sessionID: root,
+        item: { type: "synthetic", payload: { text: "continue" }, delivery: "steer" },
+      })
+      yield* s.bus.publish(SessionEvent.InboxDelivered, { sessionID: root, inboxID: syntheticID })
+      yield* s.bus.publish(SessionEvent.ModelSelected, { sessionID: root, model: secondModel, previous: firstModel })
+      const snapshot = yield* s.snapshot(child)
+      expect(snapshot).toMatchObject({
+        rootID: root,
+        rootModel: firstModel,
+        first: false,
+        cost: { session: 2, root: 1.25, descendants: 2.5 },
+      })
+      expect(snapshot?.rootUserMessageID).toBeUndefined()
+      yield* TestClock.setTime(1000)
+      const userID = SessionMessage.ID.make("msg_cost_first_real_prompt")
+      yield* s.prompt(userID, "new budget")
+      yield* s.spend(root, 0.25)
+      yield* s.spend(child, 0.75)
+      expect(yield* s.snapshot(root)).toMatchObject({
+        rootUserMessageID: userID,
+        rootModel: secondModel,
+        first: true,
+        cost: { session: 0.25, root: 0.25, descendants: 0.75 },
+      })
       expect(yield* s.snapshot(Session.ID.make("ses_missing"))).toBeUndefined()
     }),
   )
