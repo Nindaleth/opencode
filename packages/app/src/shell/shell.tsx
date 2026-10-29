@@ -296,9 +296,10 @@ export default function Layout(props: ParentProps) {
             </Show>
           </aside>
         </Show>
-        {/* Size containment collapses percentage-height descendants in WebKit. */}
+        {/* Size containment collapses percentage-height descendants in WebKit. Layout containment stops Firefox
+            painting portaled dialogs over this element when the app runs in a cross-origin iframe. */}
         <main
-          class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
+          class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start [contain:style]"
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
             // A docked composer touch bar takes over the safe area.
