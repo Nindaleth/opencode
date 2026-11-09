@@ -24,6 +24,7 @@ const RemoteModel = Schema.Struct({
             // API version 2026-08-01 renamed cache_price to cache_read_price.
             cache_price: Schema.optional(Schema.Number),
             cache_read_price: Schema.optional(Schema.Number),
+            cache_write_price: Schema.optional(Schema.Number),
             input_price: Schema.Number,
             output_price: Schema.Number,
           }),
@@ -202,7 +203,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
           read: Money.USDPerMillionTokens.make(
             (prices?.default.cache_read_price ?? prices?.default.cache_price ?? 0) * usdPerMillion,
           ),
-          write: Money.USDPerMillionTokens.zero,
+          write: Money.USDPerMillionTokens.make((prices?.default.cache_write_price ?? 0) * usdPerMillion),
         },
       },
     ],

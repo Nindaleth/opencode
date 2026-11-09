@@ -121,14 +121,15 @@ test("defensively syncs advertised Copilot models", async () => {
   }
 })
 
-test("prices cache reads from either token price spelling", async () => {
+test("prices Copilot cache reads and writes", async () => {
+  // cache-write prices for Claude were recorded as zero even when Copilot supplied a price
   // API version 2026-08-01 renamed cache_price to cache_read_price; older payloads still use cache_price.
-  const item = (id: string, prices: Record<string, number>) => ({
+  const item = (id: string, prices: Record<string, number>, endpoints = ["/chat/completions"]) => ({
     model_picker_enabled: true,
     id,
     name: id,
     version: `${id}-2026-08-01`,
-    supported_endpoints: ["/chat/completions"],
+    supported_endpoints: endpoints,
     billing: { token_prices: { batch_size: 1_000_000, default: { input_price: 250, output_price: 1500, ...prices } } },
     capabilities: {
       family: "gpt",
@@ -141,6 +142,11 @@ test("prices cache reads from either token price spelling", async () => {
     fetch: () =>
       Response.json({
         data: [
+          item(
+            "claude-opus-5.5",
+            { input_price: 400, output_price: 2000, cache_read_price: 20, cache_write_price: 500 },
+            ["/v1/messages"],
+          ),
           item("renamed", { cache_read_price: 25, cache_write_price: 0 }),
           item("legacy", { cache_price: 25 }),
           item("unpriced", {}),
@@ -150,17 +156,22 @@ test("prices cache reads from either token price spelling", async () => {
 
   try {
     const models = await run((http) => CopilotModels.get(http, server.url.origin, {}, []))
+    expect(models.get(Model.ID.make("claude-opus-5.5"))?.cost[0]).toMatchObject({
+      input: 4,
+      output: 20,
+      cache: { read: 0.2, write: 5 },
+    })
     expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({
       input: 2.5,
       output: 15,
-      cache: { read: 0.25 },
+      cache: { read: 0.25, write: 0 },
     })
     expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({
       input: 2.5,
       output: 15,
       cache: { read: 0.25 },
     })
-    expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0 } })
+    expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0, write: 0 } })
   } finally {
     await server.stop(true)
   }
