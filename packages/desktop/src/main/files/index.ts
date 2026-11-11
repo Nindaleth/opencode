@@ -2,7 +2,7 @@ export * as DesktopFiles from "./index"
 
 import { execFile, spawn } from "node:child_process"
 import { clipboard, dialog, nativeImage, shell, webContents } from "electron"
-import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Context, Effect, FileSystem, Layer, Path, Predicate } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
@@ -108,7 +108,10 @@ function make(
     }),
     readPickedFile: pickedFiles.read,
     releasePickedFiles: pickedFiles.release,
-    saveFile: Effect.fn("DesktopFiles.saveFile")(function* (options: SaveFilePickerOptions, content: string) {
+    saveFile: Effect.fn("DesktopFiles.saveFile")(function* (
+      options: SaveFilePickerOptions,
+      content: string | Uint8Array,
+    ) {
       const result = yield* Effect.promise(() =>
         dialog.showSaveDialog({
           title: options?.title ?? nativeT("desktop.dialog.saveFile"),
@@ -119,7 +122,7 @@ function make(
       if (result.canceled) return false
 
       if (!result.filePath) return false
-      yield* fs.writeFile(result.filePath, new TextEncoder().encode(content))
+      yield* fs.writeFile(result.filePath, Predicate.isString(content) ? new TextEncoder().encode(content) : content)
 
       return true
     }),
@@ -138,28 +141,30 @@ function make(
 
         // PowerShell takes its working directory rather than a path argument, and needs its own console window:
         // `start` opens one, and ignored stdio keeps the console from holding cmd's pipes open until PowerShell exits.
-        return yield* Effect.tryPromise(() =>
-          new Promise<void>((resolve, reject) => {
-            spawn("cmd.exe", ["/d", "/c", "start", "", application, "-NoExit"], {
-              cwd,
-              stdio: "ignore",
-              windowsHide: true,
-            })
-              .once("error", reject)
-              .once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`start exited with code ${code}`))))
-          }),
+        return yield* Effect.tryPromise(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              spawn("cmd.exe", ["/d", "/c", "start", "", application, "-NoExit"], {
+                cwd,
+                stdio: "ignore",
+                windowsHide: true,
+              })
+                .once("error", reject)
+                .once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`start exited with code ${code}`))))
+            }),
         )
       }
 
-      yield* Effect.tryPromise(() =>
-        new Promise<void>((resolve, reject) => {
-          const command =
-            process.platform === "darwin"
-              ? { file: "open", arguments: ["-a", application, target] }
-              : { file: application, arguments: [target] }
+      yield* Effect.tryPromise(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            const command =
+              process.platform === "darwin"
+                ? { file: "open", arguments: ["-a", application, target] }
+                : { file: application, arguments: [target] }
 
-          execFile(command.file, command.arguments, (error) => (error ? reject(error) : resolve()))
-        }),
+            execFile(command.file, command.arguments, (error) => (error ? reject(error) : resolve()))
+          }),
       )
     }),
     revealPath: Effect.fn("DesktopFiles.revealPath")(function* (target: string) {

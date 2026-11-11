@@ -170,6 +170,7 @@ export default function ArtifactView(props: {
         session={props.session}
         screen={props.screen}
         path={props.path}
+        content={props.content}
         text={fixedMode() === "preview" ? undefined : props.content.content}
         mode={mode()}
         onModeChange={fixedMode() ? undefined : (mode) => dispatchViewer({ type: "mode.changed", mode })}

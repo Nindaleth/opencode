@@ -6,8 +6,9 @@ import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { artifactKind } from "@opencode/util/artifact"
-import { getFilename } from "@opencode/util/path"
-import { usePlugin, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import { getDirectory, getFilename } from "@opencode/util/path"
+import { usePlugin, type FileContent, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
+import { bytesFromContent } from "./artifact"
 import { current, useShared } from "./context"
 import { OpenInAppMenuItemsV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath, workspaceFileUrl } from "./path"
@@ -16,6 +17,7 @@ export function ArtifactToolbar(props: {
   session: MountedSession
   screen: SessionScreen
   path: string
+  content: FileContent
   text?: string
   mode: "preview" | "source"
   onModeChange?: (mode: "preview" | "source") => void
@@ -58,6 +60,23 @@ export function ArtifactToolbar(props: {
         showToast({ variant: "success", title: ctx.t("common.copied") })
       })
       .catch(failed)
+  }
+
+  const download = async () => {
+    const name = getFilename(props.path)
+    const content = props.content
+
+    const bytes =
+      content.type === "binary" && content.bytes === undefined && content.encoding !== "base64"
+        ? await props.session.server.client.file.read(
+            { path: name, location: { directory: getDirectory(path()) } },
+            { signal: ctx.signal },
+          )
+        : bytesFromContent(content)
+
+    if (ctx.signal.aborted) return
+
+    await ctx.system.save({ name, content: bytes })
   }
 
   return (
@@ -114,15 +133,13 @@ export function ArtifactToolbar(props: {
             />
             <Menu.Portal>
               <Menu.Content class="artifact-actions-menu">
-                <Show when={props.text !== undefined}>
-                  <Menu.Item
-                    onSelect={() => {
-                      void ctx.system.save({ name: getFilename(props.path), content: props.text ?? "" }).catch(failed)
-                    }}
-                  >
-                    {ctx.t("view.download")}
-                  </Menu.Item>
-                </Show>
+                <Menu.Item
+                  onSelect={() => {
+                    void download().catch(failed)
+                  }}
+                >
+                  {ctx.t("view.download")}
+                </Menu.Item>
                 <Show when={props.onModeChange}>
                   <Menu.Item onSelect={toggleMode}>{modeLabel()}</Menu.Item>
                 </Show>
