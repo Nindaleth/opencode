@@ -73,7 +73,7 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     openAttachmentPickerDialog,
     openFilePathPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
-    saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
+    saveFile: (options: { title?: string; defaultPath?: string }, content: string | Uint8Array) =>
       api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
     openBrowser: (url: string) => api.openBrowser(url),

@@ -6,6 +6,8 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
+import { Match } from "effect"
+import { timelinePresets } from "./detail"
 import {
   createTimelineProjection,
   reasoningHeading,
@@ -127,6 +129,7 @@ describe("Timeline.resolveContent", () => {
       { type: "reasoning", text: "thinking" },
       { type: "text", text: "last" },
     ])
+
     const entries = Timeline.contentEntries(message)
     expect(entries.map((entry) => entry.id)).toEqual([
       "assistant:text:0",
@@ -138,13 +141,28 @@ describe("Timeline.resolveContent", () => {
   })
 })
 
-test("downloadable artifacts remain visible when tools are hidden", () => {
+test.each([
+  ...timelinePresets,
+  {
+    id: "hidden",
+    value: {
+      shell: { placement: "hidden", details: "collapsed" },
+      edit: { placement: "hidden", details: "collapsed" },
+      thinking: { placement: "hidden", details: "collapsed" },
+      subagents: { placement: "hidden" },
+      notices: { placement: "hidden" },
+      tools: { placement: "hidden" },
+      commentary: { placement: "hidden" },
+    } as const,
+  },
+])("downloadable artifacts stay outside collapsed groups with $id detail", (preset) => {
   const message: SessionMessageAssistant = {
     id: "assistant",
     type: "assistant",
     agent: "build",
     model: { id: "model", providerID: "provider" },
     content: [
+      { type: "reasoning", text: "preparing the report" },
       {
         type: "tool",
         id: "call",
@@ -156,22 +174,23 @@ test("downloadable artifacts remain visible when tools are hidden", () => {
     ],
     time: { created: 0 },
   }
+
   const rows = createTimelineProjection({
     sessionMessages: [{ id: "user", type: "user", text: "download", time: { created: 0 } }, message],
     status: { type: "idle" },
     reasoningMode: "hidden",
-    timelineDetail: {
-      shell: { placement: "hidden", details: "collapsed" },
-      edit: { placement: "hidden", details: "collapsed" },
-      thinking: { placement: "hidden", details: "collapsed" },
-      subagents: { placement: "hidden" },
-      notices: { placement: "hidden" },
-      tools: { placement: "hidden" },
-      commentary: { placement: "hidden" },
-    },
+    timelineDetail: preset.value,
   }).rows
+
   expect(
-    rows.filter((row) => row._tag === "AssistantPart").map((row) => row._tag === "AssistantPart" && row.group.key),
+    rows.flatMap((row) =>
+      Match.value(row).pipe(
+        Match.tag("AssistantPart", (row) =>
+          row.group.type === "part" && row.group.ref.partID.includes(":artifact:") ? [row.group.key] : [],
+        ),
+        Match.orElse(() => []),
+      ),
+    ),
   ).toEqual(["part:assistant:assistant:artifact:blob_report"])
 })
 

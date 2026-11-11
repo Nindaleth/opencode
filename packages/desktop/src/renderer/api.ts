@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import type { ElectronAPI } from "./api-types"
 import { cancellable, invoke, listen, send } from "./ipc-client"
 
@@ -51,7 +52,8 @@ export const api: ElectronAPI = {
   readPickedFile: (token, path) => invoke("FilesReadPickedFile", { token, path }).then(toArrayBuffer),
   releasePickedFiles: (token) => invoke("FilesReleasePickedFiles", { token }),
   getPathForFile: (file) => window.electron.getPathForFile(file),
-  saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
+  saveFile: (opts, content) =>
+    invoke("FilesSaveFile", { options: opts, content: Predicate.isString(content) ? content : content.slice() }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
   openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),

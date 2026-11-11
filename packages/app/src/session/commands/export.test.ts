@@ -87,7 +87,7 @@ describe("fetchSessionExport", () => {
 
 describe("saveSessionExport", () => {
   test.each([true, false])("writes pretty JSON to the native save dialog and returns %p", async (saved) => {
-    const writes: string[][] = []
+    const writes: [string, string | Uint8Array][] = []
 
     const platform: Pick<Platform, "saveFile"> = {
       saveFile: async (options, content) => {

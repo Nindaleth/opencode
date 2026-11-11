@@ -12,7 +12,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { createStore, produce, type Store } from "solid-js/store"
-import type { Schema } from "effect"
+import { Predicate, type Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useTheme } from "@opencode/ui/theme/context"
 import { toaster } from "@opencode/ui/toast"
@@ -297,7 +297,13 @@ export function createHostApis() {
       copy: (text) => platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text),
       async save(file) {
         if (platform.saveFile) return platform.saveFile({ defaultPath: file.name }, file.content)
-        const url = URL.createObjectURL(new Blob([file.content], { type: "application/octet-stream" }))
+
+        const url = URL.createObjectURL(
+          new Blob([Predicate.isString(file.content) ? file.content : file.content.slice()], {
+            type: "application/octet-stream",
+          }),
+        )
+
         const link = document.createElement("a")
         link.href = url
         link.download = file.name

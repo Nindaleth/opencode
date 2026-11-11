@@ -7,7 +7,7 @@ import type {
   SessionMessageUser,
   SessionStatus,
 } from "@opencode/client/promise"
-import { Effect, Option, Predicate, Schema } from "effect"
+import { Effect, Match, Option, Predicate, Schema } from "effect"
 import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
@@ -191,12 +191,15 @@ export function createReactiveTimelineProjection(input: {
       input.shellToolDefaultOpen?.() ?? false,
       input.editToolDefaultOpen?.() ?? false,
       (content, showReasoning, detail) =>
-        content.type === "tool"
-          ? renderable(content, showReasoning, detail)
-          : content.type === "artifact"
-            ? true
-            : (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
+        Match.value(content).pipe(
+          Match.when({ type: "tool" }, (content) => renderable(content, showReasoning, detail)),
+          Match.when({ type: "artifact" }, () => true),
+          Match.orElse(
+            (content) =>
+              (content.type === "text" || (detail ? detail.thinking.placement !== "hidden" : showReasoning)) &&
               textVisible().get(content)!(),
+          ),
+        ),
       input.timelineDetail?.(),
       input.queuedCompactionIDs?.(),
       input.turnDiffs?.(),
@@ -650,12 +653,11 @@ export namespace Timeline {
     const ordinals = { text: 0, reasoning: 0 }
 
     for (const content of message.content) {
-      const id =
-        content.type === "tool"
-          ? content.id
-          : content.type === "artifact"
-            ? `${message.id}:artifact:${content.key}`
-            : `${message.id}:${content.type}:${ordinals[content.type]++}`
+      const id = Match.value(content).pipe(
+        Match.when({ type: "tool" }, (content) => content.id),
+        Match.when({ type: "artifact" }, (content) => `${message.id}:artifact:${content.key}`),
+        Match.orElse((content) => `${message.id}:${content.type}:${ordinals[content.type]++}`),
+      )
 
       if (id === partID) return content
     }
@@ -665,12 +667,11 @@ export namespace Timeline {
     const ordinals = { text: 0, reasoning: 0 }
 
     return message.content.map((content) => ({
-      id:
-        content.type === "tool"
-          ? content.id
-          : content.type === "artifact"
-            ? `${message.id}:artifact:${content.key}`
-            : `${message.id}:${content.type}:${ordinals[content.type]++}`,
+      id: Match.value(content).pipe(
+        Match.when({ type: "tool" }, (content) => content.id),
+        Match.when({ type: "artifact" }, (content) => `${message.id}:artifact:${content.key}`),
+        Match.orElse((content) => `${message.id}:${content.type}:${ordinals[content.type]++}`),
+      ),
       content,
     }))
   }
@@ -991,7 +992,9 @@ function renderable(content: Content, showReasoning: boolean, detail?: TimelineD
 
   if (content.type === "reasoning")
     return (detail ? detail.thinking.placement !== "hidden" : showReasoning) && !!content.text.trim()
+
   if (content.type === "artifact") return true
+
   if (detail && currentToolFailed(content)) return true
 
   if (content.name === "todowrite") return false
@@ -1079,6 +1082,8 @@ function contentGroupType(
   detail?: TimelineDetail,
 ) {
   if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+
+  if (content.type === "artifact") return undefined
 
   if (content.type === "text") return commentary.has(content) ? "context" : undefined
 

@@ -7,12 +7,44 @@ import { Rpc, RpcGroup, RpcMessage, RpcServer } from "effect/rpc"
 import { Transferable } from "effect/workers"
 import { omitUndefined } from "../shared/ipc-transport"
 import { EventRpcs, MenuCommandTriggered } from "../shared/ipc-rpc/events"
-import { FilesOpenFilePicker } from "../shared/ipc-rpc/files"
+import { FilesOpenFilePicker, FilesSaveFile } from "../shared/ipc-rpc/files"
 import { emitIpcEvent } from "./ipc-events"
 import { eventHandlers } from "./ipc-handlers/events"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 
 describe("desktop RPC transport", () => {
+  test.each(["report", new Uint8Array([0, 255, 128, 2])])("preserves saved file content %p", async (content) => {
+    // binary saves must cross the renderer boundary without being encoded as text
+    let received: unknown
+    const rpcs = RpcGroup.make(FilesSaveFile)
+
+    const handlers = rpcs.toLayer({
+      FilesSaveFile: (request) =>
+        Effect.sync(() => {
+          received = request.content
+
+          return true
+        }),
+    })
+
+    const runtime = ManagedRuntime.make(
+      RpcServer.layer(rpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive)),
+    )
+
+    const channel = new MessageChannel()
+
+    try {
+      const handoff = await runtime.runPromise(IpcPortHandoff)
+      handoff.bind(sender(1), serverPort(channel.port1))
+      const result = await call(channel.port2, 0, "FilesSaveFile", { options: { defaultPath: "report.bin" }, content })
+      expect(result.exit).toEqual(success(true))
+      expect(received).toEqual(content)
+    } finally {
+      channel.port2.close()
+      await runtime.dispose()
+    }
+  })
+
   test("decodes renderer payloads whose optional fields are undefined", async () => {
     let received: unknown
     const rpcs = RpcGroup.make(FilesOpenFilePicker)

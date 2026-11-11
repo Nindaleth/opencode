@@ -170,6 +170,7 @@ export default function ArtifactView(props: {
         session={props.session}
         screen={props.screen}
         path={props.path}
+        content={props.content}
         text={previewable() ? props.content.content : undefined}
         mode={selectArtifactMode(viewerState(), props.content)}
         onModeChange={previewable() ? (mode) => dispatchViewer({ type: "mode.changed", mode }) : undefined}

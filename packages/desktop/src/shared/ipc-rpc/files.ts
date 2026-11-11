@@ -46,7 +46,7 @@ export const FilesReleasePickedFiles = Rpc.make("FilesReleasePickedFiles", {
 })
 
 export const FilesSaveFile = Rpc.make("FilesSaveFile", {
-  payload: { options: SavePickerOptions, content: Schema.String },
+  payload: { options: SavePickerOptions, content: Schema.Union([Schema.String, Transferable.Uint8Array]) },
   success: Schema.Boolean,
 })
 

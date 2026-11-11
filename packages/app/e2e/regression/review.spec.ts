@@ -958,7 +958,7 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "broken.svg") return { content: broken }
 
-      return { type: "binary", content: "AAEC", encoding: "base64" }
+      return { type: "binary", content: "AP+AAg==", encoding: "base64" }
     },
     pageMessages: () => ({
       items: [
@@ -1103,7 +1103,12 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(copy).toHaveCount(0)
   await expect(toolbar.getByRole("button", { name: "View source", exact: true })).toHaveCount(0)
   await actions.click()
-  await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
+  const binaryDownloaded = page.waitForEvent("download")
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click()
+  const binaryDownload = await binaryDownloaded
+  expect(binaryDownload.suggestedFilename()).toBe("sample.bin")
+  expect(await readFile((await binaryDownload.path())!)).toEqual(Buffer.from([0, 255, 128, 2]))
+  await actions.click()
   await page.getByRole("menuitem", { name: "Copy path", exact: true }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${workspace.directory}/sample.bin`)
 
